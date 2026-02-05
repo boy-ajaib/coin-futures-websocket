@@ -2,16 +2,35 @@
 
 A Go-based WebSocket client for connecting to the CFX (Coin Futures Exchange) using the Centrifuge protocol.
 
+## Usage
+
+```bash
+$ make
+
+Usage:
+  make <target>
+
+Targets:
+  help              Show this help message
+  run               Run the app using default config
+  run.dev           Run the app using development config
+  test              Run the tests of the project
+  test.verbose      Run the tests of the project (verbose)
+  test.coverage     Run the tests of the project and export the coverage
+  fmt               Format '*.go' files with gofumpt
+  build             Build the app
+```
+
 ## Building
 
 ```bash
-go build -o coin-futures-websocket ./cmd/app/main.go
+$ make build
 ```
 
 ## Running
 
 ```bash
-./coin-futures-websocket
+$ make run
 ```
 
 ## Development
@@ -19,7 +38,7 @@ go build -o coin-futures-websocket ./cmd/app/main.go
 Run with development config:
 
 ```bash
-ENV=development ./coin-futures-websocket
+make run.dev
 ```
 
 ## Database Schemas
