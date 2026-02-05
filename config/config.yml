@@ -1,0 +1,15 @@
+app:
+    env: production
+    log_level: info
+
+cfx:
+    key_brokerage:
+        key_id: 4
+        private_key: ./keys/ajaib.key
+
+    ws:
+        host: wss://ws-exchange.uat.cfx.co.id
+        maxServerPingDelay: 60000
+        maxReconnectDelay: 1000
+        minReconnectDelay: 100
+        timeout: 5000

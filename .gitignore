@@ -33,6 +33,5 @@ go.work.sum
 
 # Custom paths
 config/development.yml
-config/config.yml
 keys/**
 coin-futures-websocket
