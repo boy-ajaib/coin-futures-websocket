@@ -9,9 +9,12 @@ import (
 
 type (
 	Configuration struct {
-		IsLoaded bool             `mapstructure:"is_loaded"`
-		App      AppConfiguration `mapstructure:"app"`
-		Cfx      CfxConfiguration `mapstructure:"cfx"`
+		IsLoaded        bool                         `mapstructure:"is_loaded"`
+		App             AppConfiguration             `mapstructure:"app"`
+		Kafka           KafkaConfiguration           `mapstructure:"kafka"`
+		WebSocketServer WebSocketServerConfiguration `mapstructure:"websocket_server"`
+		CoinCfxAdapter  CoinCfxAdapterConfiguration  `mapstructure:"coin_cfx_adapter"`
+		CoinData        CoinDataConfiguration        `mapstructure:"coin_data"`
 	}
 
 	AppConfiguration struct {
@@ -19,22 +22,36 @@ type (
 		LogLevel string `mapstructure:"log_level"`
 	}
 
-	CfxConfiguration struct {
-		KeyBrokerage CfxKeyBrokerageConfiguration `mapstructure:"key_brokerage"`
-		Ws           CfxWsConfiguration           `mapstructure:"ws"`
+	KafkaConfiguration struct {
+		Brokers           []string `mapstructure:"brokers"`
+		Topics            []string `mapstructure:"topics"`
+		ConsumerGroup     string   `mapstructure:"consumer_group"`
+		InitialOffset     string   `mapstructure:"initial_offset"`
+		SessionTimeout    int      `mapstructure:"session_timeout"`
+		HeartbeatInterval int      `mapstructure:"heartbeat_interval"`
 	}
 
-	CfxKeyBrokerageConfiguration struct {
-		KeyId      int    `mapstructure:"key_id"`
-		PrivateKey string `mapstructure:"private_key"`
+	WebSocketServerConfiguration struct {
+		Enabled               bool   `mapstructure:"enabled"`
+		Port                  int    `mapstructure:"port"`
+		TLSCertPath           string `mapstructure:"tls_cert_path"`
+		TLSKeyPath            string `mapstructure:"tls_key_path"`
+		PingIntervalMs        int    `mapstructure:"ping_interval_ms"`
+		PingTimeoutMs         int    `mapstructure:"ping_timeout_ms"`
+		MaxConnectionsPerUser int    `mapstructure:"max_connections_per_user"`
+		ReadBufferSize        int    `mapstructure:"read_buffer_size"`
+		WriteBufferSize       int    `mapstructure:"write_buffer_size"`
+		ShutdownTimeoutMs     int    `mapstructure:"shutdown_timeout_ms"`
 	}
 
-	CfxWsConfiguration struct {
-		Host               string `mapstructure:"host"`
-		MaxServerPingDelay int    `mapstructure:"maxServerPingDelay"`
-		MaxReconnectDelay  int    `mapstructure:"maxReconnectDelay"`
-		MinReconnectDelay  int    `mapstructure:"minReconnectDelay"`
-		Timeout            int    `mapstructure:"timeout"`
+	CoinCfxAdapterConfiguration struct {
+		Host string `mapstructure:"host"`
+	}
+
+	CoinDataConfiguration struct {
+		Host            string `mapstructure:"host"`
+		CacheTTLSeconds int    `mapstructure:"cache_ttl_seconds"`
+		CfxUsdtAsset    string `mapstructure:"cfx_usdt_asset"`
 	}
 )
 
@@ -48,7 +65,6 @@ func Get() *Configuration {
 
 	configPath := "config/config.yml"
 	env := os.Getenv("ENV")
-
 	if env == "development" {
 		configPath = "config/development.yml"
 	}

@@ -3,92 +3,125 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"coin-futures-websocket/config"
-	"coin-futures-websocket/internal/client"
-	"coin-futures-websocket/internal/handler"
-	"coin-futures-websocket/internal/subscription"
-	"coin-futures-websocket/internal/util/auth"
+	"coin-futures-websocket/internal/kafka"
+	"coin-futures-websocket/internal/service"
+	"coin-futures-websocket/internal/websocket/channel"
+	wshandler "coin-futures-websocket/internal/websocket/handler"
+	"coin-futures-websocket/internal/websocket/server"
 )
 
 func main() {
 	cfg := config.Get()
 
 	logger := initLogger(cfg)
-	logger.Info("starting CFX WebSocket client",
+	logger.Info("starting WebSocket service",
 		"env", cfg.App.Env,
-		"host", cfg.Cfx.Ws.Host)
+		"ws_server_enabled", cfg.WebSocketServer.Enabled)
 
-	authenticator, err := auth.NewBrokerAuthenticator(
-		cfg.Cfx.KeyBrokerage.PrivateKey,
-		cfg.Cfx.KeyBrokerage.KeyId,
-	)
+	transformer := initTransformer(cfg, logger)
+
+	wsServer, messageHandler, err := initWebSocketServer(cfg, logger)
 	if err != nil {
-		logger.Error("failed to create authenticator", "error", err)
+		logger.Error("failed to initialize WebSocket server", "error", err)
 		os.Exit(1)
 	}
 
-	clientConfig := &client.ClientConfig{
-		Host:               cfg.Cfx.Ws.Host,
-		MaxServerPingDelay: time.Duration(cfg.Cfx.Ws.MaxServerPingDelay) * time.Millisecond,
-		MaxReconnectDelay:  time.Duration(cfg.Cfx.Ws.MaxReconnectDelay) * time.Millisecond,
-		MinReconnectDelay:  time.Duration(cfg.Cfx.Ws.MinReconnectDelay) * time.Millisecond,
-		Timeout:            time.Duration(cfg.Cfx.Ws.Timeout) * time.Millisecond,
-	}
-
-	cfxClient, err := client.NewCFXClient(clientConfig, authenticator, logger)
+	kafkaConsumer, err := initKafkaConsumer(cfg, transformer, wsServer.Hub(), messageHandler, logger)
 	if err != nil {
-		logger.Error("failed to create CFX client", "error", err)
+		logger.Error("failed to initialize Kafka consumer", "error", err)
 		os.Exit(1)
 	}
 
-	subManager := subscription.NewManager(cfxClient.CentrifugeClient(), logger)
+	// Start Kafka consumer
+	go func() {
+		if err := kafkaConsumer.Start(context.Background()); err != nil && err != context.Canceled {
+			logger.Error("Kafka consumer error", "error", err)
+		}
+	}()
 
-	// Register handlers
-	heartbeatHandler := handler.NewHeartbeatHandler(logger)
-	subManager.RegisterHandler(heartbeatHandler)
+	// Start WebSocket server
+	go func() {
+		if err := wsServer.Start(); err != nil && err != http.ErrServerClosed {
+			logger.Error("WebSocket server error", "error", err)
+		}
+	}()
 
-	if err := cfxClient.Connect(); err != nil {
-		logger.Error("failed to connect", "error", err)
-		os.Exit(1)
-	}
+	logger.Info("service running. Press Ctrl+C to exit.")
 
-	// Wait for authentication to complete before subscribing
-	if err := cfxClient.WaitForAuthentication(10 * time.Second); err != nil {
-		logger.Error("authentication failed", "error", err)
-		cfxClient.Close()
-		os.Exit(1)
-	}
-
-	// Subscribe to channels
-	if err := subManager.Subscribe("heartbeat"); err != nil {
-		logger.Error("failed to subscribe to heartbeat", "error", err)
-		cfxClient.Close()
-		os.Exit(1)
-	}
-
-	logger.Info("CFX client running. Press Ctrl+C to exit.")
-
+	// Wait for shutdown signal
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	sig := <-sigChan
 	logger.Info("received shutdown signal", "signal", sig)
 
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), time.Duration(cfg.WebSocketServer.ShutdownTimeoutMs)*time.Millisecond)
 	defer shutdownCancel()
 
-	subManager.UnsubscribeAll()
+	if err := wsServer.Shutdown(shutdownCtx); err != nil {
+		logger.Error("error shutting down WebSocket server", "error", err)
+	}
 
-	if err := cfxClient.CloseWithContext(shutdownCtx); err != nil {
-		logger.Error("error closing client", "error", err)
+	messageHandler.Stop()
+
+	if kafkaConsumer != nil {
+		if err := kafkaConsumer.Close(); err != nil {
+			logger.Error("error closing Kafka consumer", "error", err)
+		}
 	}
 
 	logger.Info("shutdown complete")
+}
+
+// initTransformer creates the currency transformer with the coin-data rate provider.
+func initTransformer(cfg *config.Configuration, logger *slog.Logger) service.TransformerInterface {
+	rateProvider := service.NewHTTPRateProvider(cfg.CoinData.Host, logger)
+	currencyService := service.NewCachedCurrencyService(
+		rateProvider,
+		time.Duration(cfg.CoinData.CacheTTLSeconds)*time.Second,
+		logger,
+	)
+	return service.NewTransformer(currencyService, cfg.CoinData.CfxUsdtAsset, logger)
+}
+
+// initWebSocketServer creates the WebSocket server, channel manager, and message handler.
+func initWebSocketServer(cfg *config.Configuration, logger *slog.Logger) (*server.Server, *wshandler.DefaultHandler, error) {
+	wsServer := server.NewServer(&cfg.WebSocketServer, logger)
+	channelManager := channel.NewManager(logger)
+
+	cfxUserMappingClient := service.NewHTTPCfxUserMappingClient(cfg.CoinCfxAdapter.Host, logger)
+	wsServer.SetCfxUserMapper(cfxUserMappingClient)
+
+	messageHandler := wshandler.NewDefaultHandler(wsServer.Hub(), logger)
+	messageHandler.SetChannelManager(channelManager)
+
+	wsServer.SetMessageHandler(messageHandler)
+	return wsServer, messageHandler, nil
+}
+
+// initKafkaConsumer creates the Broadcaster and Kafka consumer, wiring the broadcaster to the message handler.
+func initKafkaConsumer(cfg *config.Configuration, transformer service.TransformerInterface, hub *server.Hub, messageHandler *wshandler.DefaultHandler, logger *slog.Logger) (*kafka.KafkaReaderConsumer, error) {
+	broadcaster := kafka.NewBroadcaster(hub, transformer, logger)
+	messageHandler.SetKafkaBroadcaster(broadcaster)
+
+	kafkaConfig := &kafka.ConsumerConfig{
+		Brokers:           cfg.Kafka.Brokers,
+		GroupID:           cfg.Kafka.ConsumerGroup,
+		Topics:            cfg.Kafka.Topics,
+		InitialOffset:     cfg.Kafka.InitialOffset,
+		SessionTimeout:    time.Duration(cfg.Kafka.SessionTimeout) * time.Millisecond,
+		HeartbeatInterval: time.Duration(cfg.Kafka.HeartbeatInterval) * time.Millisecond,
+		Handler:           broadcaster.HandleMessage,
+	}
+
+	return kafka.NewKafkaReaderConsumer(kafkaConfig, logger)
 }
 
 // initLogger initializes the structured logger with configuration.
