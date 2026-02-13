@@ -133,9 +133,6 @@ func (h *Hub) broadcastToChannel(message *ChannelMessage) {
 	}
 	h.mu.RUnlock()
 
-	// TODO: Uncomment for debugging purpose
-	// message.Channel = "user:130010505:margin"
-
 	msg := protocol.NewPublicationMessage(message.Channel, message.Data)
 	data, err := msg.Encode()
 	if err != nil {
