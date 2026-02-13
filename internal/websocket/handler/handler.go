@@ -18,7 +18,6 @@ type KafkaBroadcaster interface {
 // DefaultHandler handles WebSocket protocol messages
 type DefaultHandler struct {
 	hub              *server.Hub
-	channelManager   *channel.Manager
 	kafkaBroadcaster KafkaBroadcaster
 	logger           *slog.Logger
 }
@@ -29,11 +28,6 @@ func NewDefaultHandler(hub *server.Hub, logger *slog.Logger) *DefaultHandler {
 		hub:    hub,
 		logger: logger,
 	}
-}
-
-// SetChannelManager sets the channel manager for subscription validation
-func (h *DefaultHandler) SetChannelManager(manager *channel.Manager) {
-	h.channelManager = manager
 }
 
 // SetKafkaBroadcaster sets the Kafka broadcaster for user subscription tracking
@@ -83,53 +77,44 @@ func (h *DefaultHandler) handleSubscribe(client *server.Client, msg *protocol.Me
 		return client.SendMessage(protocol.NewErrorMessage(msg.ID, protocol.CodeBadRequest, "channel required"))
 	}
 
-	// Validate subscription with channel manager if available
-	if h.channelManager != nil {
-		if h.channelManager.IsSubscribed(client.ID(), channelName) {
-			return client.SendMessage(protocol.NewErrorMessage(msg.ID, protocol.CodeAlreadySubscribed, "already subscribed to channel"))
-		}
-
-		channelInfo, err := h.channelManager.ValidateSubscription(client.ID(), channelName)
-		if err != nil {
-			h.logger.Warn("subscription validation failed",
-				"client_id", client.ID(),
-				"channel", channelName,
-				"error", err)
-			code := protocol.CodeBadRequest
-			switch {
-			case errors.Is(err, channel.ErrInvalidChannelFormat),
-				errors.Is(err, channel.ErrInvalidCFXUserID):
-				code = protocol.CodeChannelNotFound
-			}
-			return client.SendMessage(protocol.NewErrorMessage(msg.ID, code, err.Error()))
-		}
-
-		if client.AjaibID() != "" && client.AjaibID() != channelInfo.AjaibID {
-			h.logger.Warn("subscription ajaib_id mismatch",
-				"client_id", client.ID(),
-				"client_ajaib_id", client.AjaibID(),
-				"channel_ajaib_id", channelInfo.AjaibID,
-				"channel", channelName)
-			return client.SendMessage(protocol.NewErrorMessage(msg.ID, protocol.CodeChannelNotFound, "channel not found"))
-		}
-
-		h.channelManager.TrackSubscription(client.ID(), channelName)
-
-		if h.kafkaBroadcaster != nil && client.CfxUserID() != "" {
-			h.kafkaBroadcaster.RegisterSubscription(client.CfxUserID(), client.AjaibID())
-		}
-
-		h.hub.SubscribeClient(client, channelName)
-
-		h.logger.Info("client subscribed to channel",
-			"client_id", client.ID(),
-			"channel", channelName)
-
-		return client.SendMessage(protocol.NewSubscribedMessage(msg.ID, channelName))
+	if h.hub.IsClientSubscribed(client, channelName) {
+		return client.SendMessage(protocol.NewErrorMessage(msg.ID, protocol.CodeAlreadySubscribed, "already subscribed to channel"))
 	}
 
-	// No channel manager configured, subscribe directly
+	channelInfo, err := channel.ParseChannel(channelName)
+	if err != nil {
+		h.logger.Warn("subscription validation failed",
+			"client_id", client.ID(),
+			"channel", channelName,
+			"error", err)
+		code := protocol.CodeBadRequest
+		switch {
+		case errors.Is(err, channel.ErrInvalidChannelFormat),
+			errors.Is(err, channel.ErrInvalidCFXUserID):
+			code = protocol.CodeChannelNotFound
+		}
+		return client.SendMessage(protocol.NewErrorMessage(msg.ID, code, err.Error()))
+	}
+
+	if client.AjaibID() != "" && client.AjaibID() != channelInfo.AjaibID {
+		h.logger.Warn("subscription ajaib_id mismatch",
+			"client_id", client.ID(),
+			"client_ajaib_id", client.AjaibID(),
+			"channel_ajaib_id", channelInfo.AjaibID,
+			"channel", channelName)
+		return client.SendMessage(protocol.NewErrorMessage(msg.ID, protocol.CodeChannelNotFound, "channel not found"))
+	}
+
+	if h.kafkaBroadcaster != nil && client.CfxUserID() != "" {
+		h.kafkaBroadcaster.RegisterSubscription(client.CfxUserID(), client.AjaibID())
+	}
+
 	h.hub.SubscribeClient(client, channelName)
+
+	h.logger.Info("client subscribed to channel",
+		"client_id", client.ID(),
+		"channel", channelName)
+
 	return client.SendMessage(protocol.NewSubscribedMessage(msg.ID, channelName))
 }
 
@@ -140,15 +125,11 @@ func (h *DefaultHandler) handleUnsubscribe(client *server.Client, msg *protocol.
 		return client.SendMessage(protocol.NewErrorMessage(msg.ID, protocol.CodeBadRequest, "channel required"))
 	}
 
-	if h.channelManager != nil && !h.channelManager.IsSubscribed(client.ID(), channelName) {
+	if !h.hub.IsClientSubscribed(client, channelName) {
 		return client.SendMessage(protocol.NewErrorMessage(msg.ID, protocol.CodeNotSubscribed, "not subscribed to channel"))
 	}
 
 	h.hub.UnsubscribeClient(client, channelName)
-
-	if h.channelManager != nil {
-		h.channelManager.UntrackSubscription(client.ID(), channelName)
-	}
 
 	if h.kafkaBroadcaster != nil && client.CfxUserID() != "" {
 		h.kafkaBroadcaster.UnregisterSubscription(client.CfxUserID())
@@ -163,10 +144,6 @@ func (h *DefaultHandler) handleUnsubscribe(client *server.Client, msg *protocol.
 
 // OnClientDisconnect should be called when a client disconnects to cleanup tracking
 func (h *DefaultHandler) OnClientDisconnect(clientID, cfxUserID string) {
-	if h.channelManager != nil {
-		h.channelManager.UntrackClient(clientID)
-	}
-
 	if h.kafkaBroadcaster != nil && cfxUserID != "" {
 		h.kafkaBroadcaster.UnregisterSubscription(cfxUserID)
 	}

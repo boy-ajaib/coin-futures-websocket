@@ -12,7 +12,6 @@ import (
 	"coin-futures-websocket/config"
 	"coin-futures-websocket/internal/kafka"
 	"coin-futures-websocket/internal/service"
-	"coin-futures-websocket/internal/websocket/channel"
 	wshandler "coin-futures-websocket/internal/websocket/handler"
 	"coin-futures-websocket/internal/websocket/server"
 )
@@ -94,13 +93,11 @@ func initTransformer(cfg *config.Configuration, logger *slog.Logger) service.Tra
 // initWebSocketServer creates the WebSocket server, channel manager, and message handler.
 func initWebSocketServer(cfg *config.Configuration, logger *slog.Logger) (*server.Server, *wshandler.DefaultHandler, error) {
 	wsServer := server.NewServer(&cfg.WebSocketServer, logger)
-	channelManager := channel.NewManager(logger)
 
 	cfxUserMappingClient := service.NewHTTPCfxUserMappingClient(cfg.CoinCfxAdapter.Host, logger)
 	wsServer.SetCfxUserMapper(cfxUserMappingClient)
 
 	messageHandler := wshandler.NewDefaultHandler(wsServer.Hub(), logger)
-	messageHandler.SetChannelManager(channelManager)
 
 	wsServer.SetMessageHandler(messageHandler)
 	return wsServer, messageHandler, nil

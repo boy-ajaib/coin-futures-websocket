@@ -212,6 +212,13 @@ func (h *Hub) CanUserConnect(ajaibID string) bool {
 	return h.userConnections[ajaibID] < h.maxConnectionsPerUser
 }
 
+// IsClientSubscribed checks if a client is subscribed to a channel
+func (h *Hub) IsClientSubscribed(client *Client, channel string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return client.subscriptions[channel]
+}
+
 // GetChannelSubscriberCount returns the number of subscribers for a channel
 func (h *Hub) GetChannelSubscriberCount(channel string) int {
 	h.mu.RLock()

@@ -19,8 +19,6 @@ type Client struct {
 	conn          *websocket.Conn
 	send          chan []byte
 	subscriptions map[string]bool
-	lastPing      time.Time
-	connectedAt   time.Time
 	logger        *slog.Logger
 
 	pingInterval time.Duration
@@ -63,8 +61,6 @@ func NewClient(hub *Hub, conn *websocket.Conn, config *ClientConfig, ajaibID, cf
 		conn:          conn,
 		send:          make(chan []byte, config.SendBuffer),
 		subscriptions: make(map[string]bool),
-		lastPing:      time.Now(),
-		connectedAt:   time.Now(),
 		logger:        logger,
 		pingInterval:  config.PingInterval,
 		pingTimeout:   config.PingTimeout,
@@ -86,11 +82,6 @@ func (c *Client) AjaibID() string {
 // CfxUserID returns CFX user ID resolved from Ajaib ID at connection time
 func (c *Client) CfxUserID() string {
 	return c.cfxUserID
-}
-
-// ConnectedAt returns time when client connected
-func (c *Client) ConnectedAt() time.Time {
-	return c.connectedAt
 }
 
 // ReadPump pumps messages from the WebSocket connection to hub
