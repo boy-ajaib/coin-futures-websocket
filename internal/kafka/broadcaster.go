@@ -156,29 +156,3 @@ func (b *Broadcaster) getAjaibID(cfxUserID string) string {
 	defer b.mu.RUnlock()
 	return b.activeUsers[cfxUserID]
 }
-
-// GetActiveUserCount returns the number of active user subscriptions
-func (b *Broadcaster) GetActiveUserCount() int {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	return len(b.activeUsers)
-}
-
-// GetActiveUsers returns a list of all active user IDs
-func (b *Broadcaster) GetActiveUsers() []string {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	users := make([]string, 0, len(b.activeUsers))
-	for userID := range b.activeUsers {
-		users = append(users, userID)
-	}
-	return users
-}
-
-// ClearAll removes all active subscriptions (useful for testing or shutdown)
-func (b *Broadcaster) ClearAll() {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.activeUsers = make(map[string]string)
-}

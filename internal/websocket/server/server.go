@@ -150,7 +150,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, `{"type":"error","code":4100,"message":"unauthorized"}`)
 		return
 	}
-	if ajaibID != "" && !s.hub.CanUserConnect(ajaibID) {
+	if !s.hub.CanUserConnect(ajaibID) {
 		s.logger.Warn("connection limit reached, rejecting connection",
 			"ajaib_id", ajaibID,
 			"remote_addr", r.RemoteAddr)

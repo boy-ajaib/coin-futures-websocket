@@ -191,13 +191,6 @@ func (h *Hub) GetClientCount() int {
 	return len(h.clients)
 }
 
-// GetUserConnectionCount returns the number of active connections for a specific user
-func (h *Hub) GetUserConnectionCount(ajaibID string) int {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return h.userConnections[ajaibID]
-}
-
 // CanUserConnect checks if a user can establish a new connection based on the limit
 func (h *Hub) CanUserConnect(ajaibID string) bool {
 	if ajaibID == "" || h.maxConnectionsPerUser <= 0 {
@@ -214,17 +207,6 @@ func (h *Hub) IsClientSubscribed(client *Client, channel string) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return client.subscriptions[channel]
-}
-
-// GetChannelSubscriberCount returns the number of subscribers for a channel
-func (h *Hub) GetChannelSubscriberCount(channel string) int {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-
-	if clients, exists := h.channels[channel]; exists {
-		return len(clients)
-	}
-	return 0
 }
 
 // Broadcast sends a message to all subscribers of a specific channel

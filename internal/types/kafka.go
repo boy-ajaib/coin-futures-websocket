@@ -56,16 +56,6 @@ type UserPosition struct {
 	OrderMargin              float64 `json:"order_margin"`
 }
 
-// GetChannelName returns the WebSocket channel name for this margin data
-func (m *UserMargin) GetChannelName() string {
-	return "user:" + m.CFXUserID + ":" + ChannelMarginSuffix
-}
-
-// GetChannelName returns the WebSocket channel name for this position data
-func (p *UserPosition) GetChannelName() string {
-	return "user:" + p.CFXUserID + ":" + ChannelPositionSuffix
-}
-
 // GetCFXUserID returns the CFX user ID for this margin data
 func (m *UserMargin) GetCFXUserID() string {
 	return m.CFXUserID

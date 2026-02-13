@@ -25,13 +25,7 @@ func main() {
 		"ws_server_enabled", cfg.WebSocketServer.Enabled)
 
 	transformer := initTransformer(cfg, logger)
-
-	wsServer, messageHandler, err := initWebSocketServer(cfg, logger)
-	if err != nil {
-		logger.Error("failed to initialize WebSocket server", "error", err)
-		os.Exit(1)
-	}
-
+	wsServer, messageHandler := initWebSocketServer(cfg, logger)
 	kafkaConsumer, err := initKafkaConsumer(cfg, transformer, wsServer.Hub(), messageHandler, logger)
 	if err != nil {
 		logger.Error("failed to initialize Kafka consumer", "error", err)
@@ -91,7 +85,7 @@ func initTransformer(cfg *config.Configuration, logger *slog.Logger) service.Tra
 }
 
 // initWebSocketServer creates the WebSocket server, channel manager, and message handler.
-func initWebSocketServer(cfg *config.Configuration, logger *slog.Logger) (*server.Server, *wshandler.DefaultHandler, error) {
+func initWebSocketServer(cfg *config.Configuration, logger *slog.Logger) (*server.Server, *wshandler.DefaultHandler) {
 	wsServer := server.NewServer(&cfg.WebSocketServer, logger)
 
 	cfxUserMappingClient := service.NewHTTPCfxUserMappingClient(cfg.CoinCfxAdapter.Host, logger)
@@ -100,7 +94,7 @@ func initWebSocketServer(cfg *config.Configuration, logger *slog.Logger) (*serve
 	messageHandler := wshandler.NewDefaultHandler(wsServer.Hub(), logger)
 
 	wsServer.SetMessageHandler(messageHandler)
-	return wsServer, messageHandler, nil
+	return wsServer, messageHandler
 }
 
 // initKafkaConsumer creates the Broadcaster and Kafka consumer, wiring the broadcaster to the message handler.

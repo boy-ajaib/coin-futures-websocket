@@ -10,7 +10,6 @@ import (
 
 // CurrencyService defines the interface for currency conversion operations
 type CurrencyService interface {
-	ConvertToIDR(ctx context.Context, amountUSDT float64) (float64, error)
 	GetCurrentRate(ctx context.Context) (float64, error)
 }
 
@@ -75,16 +74,6 @@ func NewCachedCurrencyService(rateProvider RateProvider, cacheTTL time.Duration,
 		cache:        newRateCache(cacheTTL),
 		logger:       logger,
 	}
-}
-
-// ConvertToIDR converts a USDT amount to IDR using the current exchange rate
-func (s *cachedCurrencyService) ConvertToIDR(ctx context.Context, amountUSDT float64) (float64, error) {
-	rate, err := s.GetCurrentRate(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get current rate: %w", err)
-	}
-
-	return amountUSDT * rate, nil
 }
 
 // GetCurrentRate returns the current exchange rate, fetching a new one if the cache has expired

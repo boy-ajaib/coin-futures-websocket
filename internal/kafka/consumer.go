@@ -60,20 +60,6 @@ type ConsumerConfig struct {
 	FetchDefault      int32
 }
 
-// DefaultConsumerConfig returns a consumer config with sensible defaults
-func DefaultConsumerConfig() *ConsumerConfig {
-	return &ConsumerConfig{
-		InitialOffset:     "latest",
-		SessionTimeout:    20 * time.Second,
-		HeartbeatInterval: 6 * time.Second,
-		MaxProcessingTime: 5 * time.Minute,
-		RebalanceTimeout:  60 * time.Second,
-		FetchMin:          1,
-		FetchMax:          1024 * 1024, // 1MB
-		FetchDefault:      1024 * 1024, // 1MB
-	}
-}
-
 // NewKafkaReaderConsumer creates a new Kafka consumer using kafka-go
 func NewKafkaReaderConsumer(config *ConsumerConfig, logger *slog.Logger) (*KafkaReaderConsumer, error) {
 	if config == nil {
@@ -219,13 +205,6 @@ func (c *KafkaReaderConsumer) IsHealthy() bool {
 	c.statsMu.RLock()
 	defer c.statsMu.RUnlock()
 	return c.stats.Connected
-}
-
-// Stats returns current consumer statistics
-func (c *KafkaReaderConsumer) Stats() ConsumerStats {
-	c.statsMu.RLock()
-	defer c.statsMu.RUnlock()
-	return c.stats
 }
 
 // incrementMessagesConsumed increments the consumed message counter
