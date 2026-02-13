@@ -2,14 +2,33 @@ app:
     env: production
     log_level: info
 
-cfx:
-    key_brokerage:
-        key_id: 4
-        private_key: ./keys/ajaib.key
+kafka:
+    brokers:
+        - kafka-1.platform.stg.ajaib.int:9092
+        - kafka-2.platform.stg.ajaib.int:9092
+        - kafka-3.platform.stg.ajaib.int:9092
+    topics:
+        - com.ajaib.coin.cfx.streamer.futures.message.UserMargin
+        - com.ajaib.coin.cfx.streamer.futures.message.UserPosition
+    consumer_group: coin-futures-websocket
+    initial_offset: latest
+    session_timeout: 10000
+    heartbeat_interval: 1000
 
-    ws:
-        host: wss://ws-exchange.uat.cfx.co.id
-        maxServerPingDelay: 60000
-        maxReconnectDelay: 1000
-        minReconnectDelay: 100
-        timeout: 5000
+websocket_server:
+    enabled: true
+    port: 8009
+    ping_interval_ms: 2000
+    ping_timeout_ms: 30000
+    no_command_timeout_ms: 20000
+    max_connections_per_user: 5
+    shutdown_timeout_ms: 10000
+
+coin_cfx_adapter:
+    host: http://coin-cfx-adapter.stg.ajaib.int
+    cache_ttl_seconds: 60
+
+coin_data:
+    host: http://coin-data-svc.stg.ajaib.int
+    cache_ttl_seconds: 5
+    cfx_usdt_asset: "USDT"
