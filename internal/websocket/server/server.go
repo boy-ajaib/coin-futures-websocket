@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"coin-futures-websocket/config"
+	"coin-futures-websocket/internal/cache"
 	"coin-futures-websocket/internal/websocket/protocol"
 
 	"github.com/gorilla/websocket"
@@ -39,6 +40,8 @@ type Server struct {
 	clientConfig     *ClientConfig
 	cfxUserMapper    CfxUserMapper
 	userPrefProvider UserPreferenceProvider
+	cfxUserCache     *cache.TTLCache[string]
+	quotePrefCache   *cache.TTLCache[string]
 }
 
 // NewServer creates a new WebSocket server
@@ -63,6 +66,8 @@ func NewServer(cfg *config.WebSocketServerConfiguration, logger *slog.Logger) *S
 		writeBufferSize = 1024
 	}
 
+	const resolveCacheTTL = 60 * time.Second
+
 	s := &Server{
 		hub:    hub,
 		config: cfg,
@@ -74,7 +79,9 @@ func NewServer(cfg *config.WebSocketServerConfiguration, logger *slog.Logger) *S
 				return true
 			},
 		},
-		clientConfig: clientConfig,
+		clientConfig:   clientConfig,
+		cfxUserCache:   cache.NewTTLCache[string](resolveCacheTTL),
+		quotePrefCache: cache.NewTTLCache[string](resolveCacheTTL),
 	}
 
 	return s
@@ -261,6 +268,10 @@ func (s *Server) resolveCfxUserID(ajaibID string) (string, error) {
 		return "", fmt.Errorf("ajaib_id is empty or cfx user mapper is not configured")
 	}
 
+	if cached, ok := s.cfxUserCache.Get(ajaibID); ok {
+		return cached, nil
+	}
+
 	id, err := strconv.ParseInt(ajaibID, 10, 64)
 	if err != nil {
 		return "", fmt.Errorf("invalid ajaib_id format: %w", err)
@@ -271,6 +282,7 @@ func (s *Server) resolveCfxUserID(ajaibID string) (string, error) {
 		return "", fmt.Errorf("failed to resolve ajaib_id to cfx_user_id: %w", err)
 	}
 
+	s.cfxUserCache.Set(ajaibID, cfxUserID)
 	return cfxUserID, nil
 }
 
@@ -280,5 +292,15 @@ func (s *Server) resolveQuotePreference(ajaibID string) (string, error) {
 		return "", nil
 	}
 
-	return s.userPrefProvider.GetQuotePreference(context.Background(), ajaibID)
+	if cached, ok := s.quotePrefCache.Get(ajaibID); ok {
+		return cached, nil
+	}
+
+	pref, err := s.userPrefProvider.GetQuotePreference(context.Background(), ajaibID)
+	if err != nil {
+		return "", err
+	}
+
+	s.quotePrefCache.Set(ajaibID, pref)
+	return pref, nil
 }
