@@ -30,5 +30,5 @@ coin_cfx_adapter:
 
 coin_data:
     host: http://coin-data-svc.stg.ajaib.int
-    cache_ttl_seconds: 5
+    cache_ttl_seconds: 60
     cfx_usdt_asset: "USDT"

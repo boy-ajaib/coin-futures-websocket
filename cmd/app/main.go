@@ -24,7 +24,7 @@ func main() {
 		"env", cfg.App.Env,
 		"ws_server_enabled", cfg.WebSocketServer.Enabled)
 
-	transformer := initTransformer(cfg, logger)
+	transformer, currencyService := initTransformer(cfg, logger)
 	wsServer, messageHandler := initWebSocketServer(cfg, logger)
 	kafkaConsumer, err := initKafkaConsumer(cfg, transformer, wsServer.Hub(), messageHandler, logger)
 	if err != nil {
@@ -63,6 +63,7 @@ func main() {
 	}
 
 	messageHandler.Stop()
+	currencyService.Stop()
 
 	if kafkaConsumer != nil {
 		if err := kafkaConsumer.Close(); err != nil {
@@ -74,14 +75,14 @@ func main() {
 }
 
 // initTransformer creates the currency transformer with the coin-data rate provider.
-func initTransformer(cfg *config.Configuration, logger *slog.Logger) service.TransformerInterface {
+func initTransformer(cfg *config.Configuration, logger *slog.Logger) (service.TransformerInterface, *service.CachedCurrencyService) {
 	rateProvider := service.NewHTTPRateProvider(cfg.CoinData.Host, logger)
 	currencyService := service.NewCachedCurrencyService(
 		rateProvider,
 		time.Duration(cfg.CoinData.CacheTTLSeconds)*time.Second,
 		logger,
 	)
-	return service.NewTransformer(currencyService, cfg.CoinData.CfxUsdtAsset, logger)
+	return service.NewTransformer(currencyService, cfg.CoinData.CfxUsdtAsset, logger), currencyService
 }
 
 // initWebSocketServer creates the WebSocket server, channel manager, and message handler.

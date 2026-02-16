@@ -13,96 +13,77 @@ type CurrencyService interface {
 	GetCurrentRate(ctx context.Context) (float64, error)
 }
 
-// rateCache holds a cached exchange rate with expiration
-type rateCache struct {
-	rate      float64
-	timestamp time.Time
-	mu        sync.RWMutex
-	ttl       time.Duration
-}
-
-// newRateCache creates a new rate cache with the specified TTL
-func newRateCache(ttl time.Duration) *rateCache {
-	return &rateCache{
-		ttl: ttl,
-	}
-}
-
-// get returns the cached rate if it's still valid, otherwise returns an error
-func (c *rateCache) get() (float64, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	if c.rate == 0 {
-		return 0, fmt.Errorf("no cached rate available")
-	}
-
-	if time.Since(c.timestamp) > c.ttl {
-		return 0, fmt.Errorf("cached rate has expired")
-	}
-
-	return c.rate, nil
-}
-
-// set stores a new rate in the cache
-func (c *rateCache) set(rate float64) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.rate = rate
-	c.timestamp = time.Now()
-}
-
-// isExpired checks if the cached rate has expired
-func (c *rateCache) isExpired() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.rate == 0 || time.Since(c.timestamp) > c.ttl
-}
-
-// cachedCurrencyService implements CurrencyService with rate caching
-type cachedCurrencyService struct {
+// CachedCurrencyService implements CurrencyService with a background scheduler that periodically refreshes the exchange rate
+type CachedCurrencyService struct {
 	rateProvider RateProvider
-	cache        *rateCache
-	logger       *slog.Logger
+	rate         float64
 	mu           sync.RWMutex
+	logger       *slog.Logger
+	stop         chan struct{}
 }
 
-// NewCachedCurrencyService creates a new CurrencyService with rate caching
-func NewCachedCurrencyService(rateProvider RateProvider, cacheTTL time.Duration, logger *slog.Logger) CurrencyService {
-	return &cachedCurrencyService{
+// NewCachedCurrencyService creates a CurrencyService that refreshes the exchange rate in the background at the given interval
+func NewCachedCurrencyService(rateProvider RateProvider, refreshInterval time.Duration, logger *slog.Logger) *CachedCurrencyService {
+	s := &CachedCurrencyService{
 		rateProvider: rateProvider,
-		cache:        newRateCache(cacheTTL),
 		logger:       logger,
+		stop:         make(chan struct{}),
+	}
+
+	s.refresh()
+
+	go s.run(refreshInterval)
+
+	return s
+}
+
+// run is the background loop that refreshes the rate on a fixed schedule
+func (s *CachedCurrencyService) run(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			s.refresh()
+		case <-s.stop:
+			return
+		}
 	}
 }
 
-// GetCurrentRate returns the current exchange rate, fetching a new one if the cache has expired
-func (s *cachedCurrencyService) GetCurrentRate(ctx context.Context) (float64, error) {
-	if !s.cache.isExpired() {
-		if rate, err := s.cache.get(); err == nil {
-			s.logger.Debug("using cached exchange rate", "rate", rate)
-			return rate, nil
-		}
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if !s.cache.isExpired() {
-		if rate, err := s.cache.get(); err == nil {
-			return rate, nil
-		}
-	}
-
-	s.logger.Debug("fetching new exchange rate from provider")
+// refresh fetches the latest rate from the provider and updates the cache
+func (s *CachedCurrencyService) refresh() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
 	rate, err := s.rateProvider.GetUSDTToIDRRate(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("failed to fetch rate from provider: %w", err)
+		s.logger.Warn("failed to refresh exchange rate, using last known rate", "error", err)
+		return
 	}
 
-	s.cache.set(rate)
-	s.logger.Info("updated exchange rate cache", "rate", rate, "ttl", s.cache.ttl)
+	s.mu.Lock()
+	s.rate = rate
+	s.mu.Unlock()
+
+	s.logger.Info("refreshed exchange rate", "rate", rate)
+}
+
+// GetCurrentRate returns the latest cached exchange rate
+func (s *CachedCurrencyService) GetCurrentRate(ctx context.Context) (float64, error) {
+	s.mu.RLock()
+	rate := s.rate
+	s.mu.RUnlock()
+
+	if rate == 0 {
+		return 0, fmt.Errorf("no exchange rate available")
+	}
 
 	return rate, nil
+}
+
+// Stop shuts down the background refresh goroutine
+func (s *CachedCurrencyService) Stop() {
+	close(s.stop)
 }
