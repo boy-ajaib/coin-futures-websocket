@@ -18,21 +18,27 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// CfxUserMapper resolves an Ajaib user ID to a CFX user ID.
+// CfxUserMapper resolves an Ajaib user ID to a CFX user ID
 type CfxUserMapper interface {
 	GetCfxUserID(ctx context.Context, ajaibID int64) (string, error)
 }
 
+// UserPreferenceProvider fetches a user's futures quote preference
+type UserPreferenceProvider interface {
+	GetQuotePreference(ctx context.Context, ajaibID string) (string, error)
+}
+
 // Server represents a WebSocket server
 type Server struct {
-	hub           *Hub
-	httpServer    *http.Server
-	upgrader      websocket.Upgrader
-	config        *config.WebSocketServerConfiguration
-	logger        *slog.Logger
-	handler       MessageHandler
-	clientConfig  *ClientConfig
-	cfxUserMapper CfxUserMapper
+	hub              *Hub
+	httpServer       *http.Server
+	upgrader         websocket.Upgrader
+	config           *config.WebSocketServerConfiguration
+	logger           *slog.Logger
+	handler          MessageHandler
+	clientConfig     *ClientConfig
+	cfxUserMapper    CfxUserMapper
+	userPrefProvider UserPreferenceProvider
 }
 
 // NewServer creates a new WebSocket server
@@ -79,9 +85,14 @@ func (s *Server) SetMessageHandler(handler MessageHandler) {
 	s.handler = handler
 }
 
-// SetCfxUserMapper sets the mapper used to resolve Ajaib ID to CFX user ID at connection time.
+// SetCfxUserMapper sets the mapper used to resolve Ajaib ID to CFX user ID at connection time
 func (s *Server) SetCfxUserMapper(mapper CfxUserMapper) {
 	s.cfxUserMapper = mapper
+}
+
+// SetUserPreferenceProvider sets the provider used to fetch user quote preference at connection time
+func (s *Server) SetUserPreferenceProvider(provider UserPreferenceProvider) {
+	s.userPrefProvider = provider
 }
 
 // Hub returns the server's hub instance
@@ -147,7 +158,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			"remote_addr", r.RemoteAddr)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintf(w, `{"type":"error","code":4100,"message":"unauthorized"}`)
+		fmt.Fprintf(w, `{"type":"error","code":%d,"message":"unauthorized"}`, protocol.CodeUnauthorized)
 		return
 	}
 	if !s.hub.CanUserConnect(ajaibID) {
@@ -156,7 +167,29 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			"remote_addr", r.RemoteAddr)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusTooManyRequests)
-		fmt.Fprintf(w, `{"type":"error","code":4200,"message":"connection limit reached"}`)
+		fmt.Fprintf(w, `{"type":"error","code":%d,"message":"connection limit reached"}`, protocol.CodeConnectionLimit)
+		return
+	}
+
+	cfxUserID, err := s.resolveCfxUserID(ajaibID)
+	if err != nil {
+		s.logger.Error("failed to resolve cfx user id",
+			"ajaib_id", ajaibID,
+			"error", err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprintf(w, `{"type":"error","code":%d,"message":"failed to resolve cfx user id"}`, protocol.CodeCfxUserResolution)
+		return
+	}
+
+	quotePreference, err := s.resolveQuotePreference(ajaibID)
+	if err != nil {
+		s.logger.Error("failed to fetch user quote preference",
+			"ajaib_id", ajaibID,
+			"error", err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprintf(w, `{"type":"error","code":%d,"message":"failed to fetch user preference"}`, protocol.CodeUserPreference)
 		return
 	}
 
@@ -166,8 +199,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cfxUserID := s.resolveCfxUserID(ajaibID)
-	client := NewClient(s.hub, conn, s.clientConfig, ajaibID, cfxUserID, s.logger)
+	client := NewClient(s.hub, conn, s.clientConfig, ajaibID, cfxUserID, quotePreference, s.logger)
 
 	// Register client with hub
 	s.hub.register <- client
@@ -224,23 +256,29 @@ func (s *Server) parseAjaibIDFromHeader(r *http.Request) string {
 }
 
 // resolveCfxUserID maps an Ajaib ID string to a CFX user ID via the configured mapper
-func (s *Server) resolveCfxUserID(ajaibID string) string {
+func (s *Server) resolveCfxUserID(ajaibID string) (string, error) {
 	if ajaibID == "" || s.cfxUserMapper == nil {
-		return ""
+		return "", fmt.Errorf("ajaib_id is empty or cfx user mapper is not configured")
 	}
 
 	id, err := strconv.ParseInt(ajaibID, 10, 64)
 	if err != nil {
-		s.logger.Warn("invalid ajaib_id format", "ajaib_id", ajaibID, "error", err)
-		return ""
+		return "", fmt.Errorf("invalid ajaib_id format: %w", err)
 	}
 
 	cfxUserID, err := s.cfxUserMapper.GetCfxUserID(context.Background(), id)
 	if err != nil {
-		s.logger.Warn("failed to resolve ajaib_id to cfx_user_id",
-			"ajaib_id", ajaibID, "error", err)
-		return ""
+		return "", fmt.Errorf("failed to resolve ajaib_id to cfx_user_id: %w", err)
 	}
 
-	return cfxUserID
+	return cfxUserID, nil
+}
+
+// resolveQuotePreference fetches the user's futures quote preference via the configured provider
+func (s *Server) resolveQuotePreference(ajaibID string) (string, error) {
+	if ajaibID == "" || s.userPrefProvider == nil {
+		return "", nil
+	}
+
+	return s.userPrefProvider.GetQuotePreference(context.Background(), ajaibID)
 }

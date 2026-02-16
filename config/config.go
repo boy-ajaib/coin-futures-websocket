@@ -15,6 +15,7 @@ type (
 		WebSocketServer WebSocketServerConfiguration `mapstructure:"websocket_server"`
 		CoinCfxAdapter  CoinCfxAdapterConfiguration  `mapstructure:"coin_cfx_adapter"`
 		CoinData        CoinDataConfiguration        `mapstructure:"coin_data"`
+		CoinSetting     CoinSettingConfiguration     `mapstructure:"coin_setting"`
 	}
 
 	AppConfiguration struct {
@@ -52,6 +53,10 @@ type (
 		Host            string `mapstructure:"host"`
 		CacheTTLSeconds int    `mapstructure:"cache_ttl_seconds"`
 		CfxUsdtAsset    string `mapstructure:"cfx_usdt_asset"`
+	}
+
+	CoinSettingConfiguration struct {
+		Host string `mapstructure:"host"`
 	}
 )
 

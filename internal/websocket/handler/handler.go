@@ -11,7 +11,7 @@ import (
 
 // KafkaBroadcaster is an interface for broadcasting Kafka messages to WebSocket clients
 type KafkaBroadcaster interface {
-	RegisterSubscription(cfxUserID, ajaibID string)
+	RegisterSubscription(cfxUserID, ajaibID, quotePreference string)
 	UnregisterSubscription(cfxUserID string)
 }
 
@@ -106,7 +106,7 @@ func (h *DefaultHandler) handleSubscribe(client *server.Client, msg *protocol.Me
 	}
 
 	if h.kafkaBroadcaster != nil && client.CfxUserID() != "" {
-		h.kafkaBroadcaster.RegisterSubscription(client.CfxUserID(), client.AjaibID())
+		h.kafkaBroadcaster.RegisterSubscription(client.CfxUserID(), client.AjaibID(), client.QuotePreference())
 	}
 
 	h.hub.SubscribeClient(client, channelName)

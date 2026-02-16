@@ -92,6 +92,9 @@ func initWebSocketServer(cfg *config.Configuration, logger *slog.Logger) (*serve
 	cfxUserMappingClient := service.NewHTTPCfxUserMappingClient(cfg.CoinCfxAdapter.Host, logger)
 	wsServer.SetCfxUserMapper(cfxUserMappingClient)
 
+	userPrefClient := service.NewHTTPUserPreferenceClient(cfg.CoinSetting.Host, logger)
+	wsServer.SetUserPreferenceProvider(userPrefClient)
+
 	messageHandler := wshandler.NewDefaultHandler(wsServer.Hub(), logger)
 
 	wsServer.SetMessageHandler(messageHandler)

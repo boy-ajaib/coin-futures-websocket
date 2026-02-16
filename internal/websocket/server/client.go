@@ -16,6 +16,7 @@ type Client struct {
 	id              string
 	ajaibID         string
 	cfxUserID       string
+	quotePreference string
 	hub             *Hub
 	conn            *websocket.Conn
 	send            chan []byte
@@ -50,24 +51,25 @@ func DefaultClientConfig() *ClientConfig {
 }
 
 // NewClient creates a new client instance
-func NewClient(hub *Hub, conn *websocket.Conn, config *ClientConfig, ajaibID, cfxUserID string, logger *slog.Logger) *Client {
+func NewClient(hub *Hub, conn *websocket.Conn, config *ClientConfig, ajaibID, cfxUserID, quotePreference string, logger *slog.Logger) *Client {
 	if config == nil {
 		config = DefaultClientConfig()
 	}
 
 	return &Client{
-		id:            uuid.New().String(),
-		ajaibID:       ajaibID,
-		cfxUserID:     cfxUserID,
-		hub:           hub,
-		conn:          conn,
-		send:          make(chan []byte, config.SendBuffer),
-		subscriptions: make(map[string]bool),
-		logger:        logger,
-		pingInterval:  config.PingInterval,
-		pingTimeout:   config.PingTimeout,
-		writeWait:     config.WriteWait,
-		readLimit:     config.ReadLimit,
+		id:              uuid.New().String(),
+		ajaibID:         ajaibID,
+		cfxUserID:       cfxUserID,
+		quotePreference: quotePreference,
+		hub:             hub,
+		conn:            conn,
+		send:            make(chan []byte, config.SendBuffer),
+		subscriptions:   make(map[string]bool),
+		logger:          logger,
+		pingInterval:    config.PingInterval,
+		pingTimeout:     config.PingTimeout,
+		writeWait:       config.WriteWait,
+		readLimit:       config.ReadLimit,
 	}
 }
 
@@ -84,6 +86,11 @@ func (c *Client) AjaibID() string {
 // CfxUserID returns CFX user ID resolved from Ajaib ID at connection time
 func (c *Client) CfxUserID() string {
 	return c.cfxUserID
+}
+
+// QuotePreference returns the user's futures quote preference fetched at connection time
+func (c *Client) QuotePreference() string {
+	return c.quotePreference
 }
 
 // AddSubscription adds a channel to the client's subscription set.

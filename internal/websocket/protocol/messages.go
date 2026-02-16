@@ -32,6 +32,8 @@ const (
 	CodeUnauthorized      = 4100
 	CodeConnectionLimit   = 4200
 	CodeInternalError     = 4500
+	CodeCfxUserResolution = 5031
+	CodeUserPreference    = 5030
 )
 
 // Message represents a WebSocket protocol message
