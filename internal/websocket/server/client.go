@@ -2,6 +2,7 @@ package server
 
 import (
 	"log/slog"
+	"sync"
 	"time"
 
 	"coin-futures-websocket/internal/websocket/protocol"
@@ -12,14 +13,15 @@ import (
 
 // Client represents a WebSocket client connection
 type Client struct {
-	id            string
-	ajaibID       string
-	cfxUserID     string
-	hub           *Hub
-	conn          *websocket.Conn
-	send          chan []byte
-	subscriptions map[string]bool
-	logger        *slog.Logger
+	id              string
+	ajaibID         string
+	cfxUserID       string
+	hub             *Hub
+	conn            *websocket.Conn
+	send            chan []byte
+	subscriptions   map[string]bool
+	subscriptionsMu sync.RWMutex
+	logger          *slog.Logger
 
 	pingInterval time.Duration
 	pingTimeout  time.Duration
@@ -82,6 +84,38 @@ func (c *Client) AjaibID() string {
 // CfxUserID returns CFX user ID resolved from Ajaib ID at connection time
 func (c *Client) CfxUserID() string {
 	return c.cfxUserID
+}
+
+// AddSubscription adds a channel to the client's subscription set.
+func (c *Client) AddSubscription(channel string) {
+	c.subscriptionsMu.Lock()
+	defer c.subscriptionsMu.Unlock()
+	c.subscriptions[channel] = true
+}
+
+// RemoveSubscription removes a channel from the client's subscription set.
+func (c *Client) RemoveSubscription(channel string) {
+	c.subscriptionsMu.Lock()
+	defer c.subscriptionsMu.Unlock()
+	delete(c.subscriptions, channel)
+}
+
+// IsSubscribed returns whether the client is subscribed to the given channel.
+func (c *Client) IsSubscribed(channel string) bool {
+	c.subscriptionsMu.RLock()
+	defer c.subscriptionsMu.RUnlock()
+	return c.subscriptions[channel]
+}
+
+// GetSubscriptions returns a snapshot of all channels the client is subscribed to.
+func (c *Client) GetSubscriptions() []string {
+	c.subscriptionsMu.RLock()
+	defer c.subscriptionsMu.RUnlock()
+	channels := make([]string, 0, len(c.subscriptions))
+	for ch := range c.subscriptions {
+		channels = append(channels, ch)
+	}
+	return channels
 }
 
 // ReadPump pumps messages from the WebSocket connection to hub

@@ -19,6 +19,7 @@ type Hub struct {
 	maxConnectionsPerUser int
 	logger                *slog.Logger
 	mu                    sync.RWMutex
+	onClientUnregister    func(clientID, cfxUserID string)
 }
 
 // ChannelMessage represents a message to broadcast to a channel
@@ -39,6 +40,11 @@ func NewHub(maxConnectionsPerUser int, logger *slog.Logger) *Hub {
 		maxConnectionsPerUser: maxConnectionsPerUser,
 		logger:                logger,
 	}
+}
+
+// SetOnClientUnregister sets a callback invoked after a client is fully unregistered.
+func (h *Hub) SetOnClientUnregister(fn func(clientID, cfxUserID string)) {
+	h.onClientUnregister = fn
 }
 
 // Run starts the hub's main event loop
@@ -85,7 +91,6 @@ func (h *Hub) registerClient(client *Client) {
 // unregisterClient removes a client from the hub
 func (h *Hub) unregisterClient(client *Client) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 
 	delete(h.clients, client)
 
@@ -102,7 +107,7 @@ func (h *Hub) unregisterClient(client *Client) {
 	}
 
 	// Remove from all channels
-	for channel := range client.subscriptions {
+	for _, channel := range client.GetSubscriptions() {
 		clients := h.channels[channel]
 		delete(clients, client)
 		if len(clients) == 0 {
@@ -111,6 +116,12 @@ func (h *Hub) unregisterClient(client *Client) {
 	}
 
 	close(client.send)
+	h.mu.Unlock()
+
+	// Notify after releasing lock to avoid holding it during external calls
+	if h.onClientUnregister != nil {
+		h.onClientUnregister(client.ID(), client.CfxUserID())
+	}
 
 	h.logger.Debug("client unregistered",
 		"client_id", client.ID(),
@@ -162,7 +173,7 @@ func (h *Hub) SubscribeClient(client *Client, channel string) {
 	}
 
 	h.channels[channel][client] = true
-	client.subscriptions[channel] = true
+	client.AddSubscription(channel)
 
 	h.logger.Debug("client subscribed to channel",
 		"client_id", client.ID(),
@@ -176,7 +187,7 @@ func (h *Hub) UnsubscribeClient(client *Client, channel string) {
 	defer h.mu.Unlock()
 
 	delete(h.channels[channel], client)
-	delete(client.subscriptions, channel)
+	client.RemoveSubscription(channel)
 
 	h.logger.Debug("client unsubscribed from channel",
 		"client_id", client.ID(),
@@ -206,7 +217,7 @@ func (h *Hub) CanUserConnect(ajaibID string) bool {
 func (h *Hub) IsClientSubscribed(client *Client, channel string) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	return client.subscriptions[channel]
+	return client.IsSubscribed(channel)
 }
 
 // Broadcast sends a message to all subscribers of a specific channel

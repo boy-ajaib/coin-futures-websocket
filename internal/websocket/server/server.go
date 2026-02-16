@@ -172,6 +172,9 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Register client with hub
 	s.hub.register <- client
 
+	// Start WritePump before sending any messages so the consumer is ready
+	go client.WritePump()
+
 	if err := client.SendMessage(protocol.NewConnectedMessage(client.ID(), ajaibID)); err != nil {
 		s.logger.Warn("failed to send connected message", "client_id", client.ID(), "error", err)
 	}
@@ -182,7 +185,6 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		"cfx_user_id", cfxUserID,
 		"remote_addr", r.RemoteAddr)
 
-	go client.WritePump()
 	go client.ReadPump(s.handler)
 }
 

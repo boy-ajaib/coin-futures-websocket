@@ -94,6 +94,11 @@ func initWebSocketServer(cfg *config.Configuration, logger *slog.Logger) (*serve
 	messageHandler := wshandler.NewDefaultHandler(wsServer.Hub(), logger)
 
 	wsServer.SetMessageHandler(messageHandler)
+
+	wsServer.Hub().SetOnClientUnregister(func(clientID, cfxUserID string) {
+		messageHandler.OnClientDisconnect(clientID, cfxUserID)
+	})
+
 	return wsServer, messageHandler
 }
 
