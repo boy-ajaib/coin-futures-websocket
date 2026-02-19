@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -12,8 +13,9 @@ import (
 	"coin-futures-websocket/config"
 	"coin-futures-websocket/internal/kafka"
 	"coin-futures-websocket/internal/service"
-	wshandler "coin-futures-websocket/internal/websocket/handler"
 	"coin-futures-websocket/internal/websocket/server"
+
+	"github.com/centrifugal/centrifuge"
 )
 
 func main() {
@@ -25,12 +27,27 @@ func main() {
 		"ws_server_enabled", cfg.WebSocketServer.Enabled)
 
 	transformer, currencyService := initTransformer(cfg, logger)
-	wsServer, messageHandler := initWebSocketServer(cfg, logger)
-	kafkaConsumer, err := initKafkaConsumer(cfg, transformer, wsServer.Hub(), messageHandler, logger)
+	wsServer := initCentrifugeServer(cfg, logger)
+
+	// Initialize metrics
+	metrics := server.NewMetrics(wsServer.Node())
+	if err := metrics.Register(); err != nil {
+		logger.Warn("failed to register metrics", "error", err)
+	} else {
+		wsServer.SetMetrics(metrics)
+		// Start background metrics collector
+		wsServer.StartMetricsCollector(metrics, 10*time.Second)
+		logger.Info("metrics endpoint available", "path", "/metrics")
+	}
+
+	kafkaConsumer, broadcaster, err := initKafkaConsumer(cfg, transformer, wsServer.Node(), logger)
 	if err != nil {
 		logger.Error("failed to initialize Kafka consumer", "error", err)
 		os.Exit(1)
 	}
+
+	// Set the broadcaster on the WebSocket server for subscription tracking
+	wsServer.SetBroadcaster(broadcaster)
 
 	// Start Kafka consumer
 	go func() {
@@ -39,10 +56,38 @@ func main() {
 		}
 	}()
 
-	// Start WebSocket server
+	// Start Centrifuge WebSocket server
 	go func() {
 		if err := wsServer.Start(); err != nil && err != http.ErrServerClosed {
 			logger.Error("WebSocket server error", "error", err)
+		}
+	}()
+
+	// Start HTTP server for WebSocket endpoint
+	go func() {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprintf(w, `{"status":"ok","connections":%d}`, wsServer.GetClientCount())
+		})
+		mux.HandleFunc("/connection", wsServer.ServeHTTP)
+
+		// Setup metrics endpoint
+		wsServer.SetupMetricsHandler(mux, "/metrics")
+
+		addr := fmt.Sprintf(":%d", cfg.WebSocketServer.Port)
+		httpServer := &http.Server{
+			Addr:         addr,
+			Handler:      mux,
+			ReadTimeout:  30 * time.Second,
+			WriteTimeout: 30 * time.Second,
+			IdleTimeout:  60 * time.Second,
+		}
+
+		logger.Info("HTTP server listening", "port", cfg.WebSocketServer.Port)
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("HTTP server error", "error", err)
 		}
 	}()
 
@@ -58,11 +103,12 @@ func main() {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), time.Duration(cfg.WebSocketServer.ShutdownTimeoutMs)*time.Millisecond)
 	defer shutdownCancel()
 
+	// Shutdown Centrifuge WebSocket server
 	if err := wsServer.Shutdown(shutdownCtx); err != nil {
 		logger.Error("error shutting down WebSocket server", "error", err)
 	}
 
-	messageHandler.Stop()
+	// Stop currency service
 	currencyService.Stop()
 
 	if kafkaConsumer != nil {
@@ -85,9 +131,9 @@ func initTransformer(cfg *config.Configuration, logger *slog.Logger) (service.Tr
 	return service.NewTransformer(currencyService, cfg.CoinData.CfxUsdtAsset, logger), currencyService
 }
 
-// initWebSocketServer creates the WebSocket server, channel manager, and message handler.
-func initWebSocketServer(cfg *config.Configuration, logger *slog.Logger) (*server.Server, *wshandler.DefaultHandler) {
-	wsServer := server.NewServer(&cfg.WebSocketServer, logger)
+// initCentrifugeServer creates the Centrifuge WebSocket server.
+func initCentrifugeServer(cfg *config.Configuration, logger *slog.Logger) *server.CentrifugeServer {
+	wsServer := server.NewCentrifugeServer(&cfg.Centrifuge, logger)
 
 	cfxUserMappingClient := service.NewHTTPCfxUserMappingClient(cfg.CoinCfxAdapter.Host, logger)
 	wsServer.SetCfxUserMapper(cfxUserMappingClient)
@@ -95,21 +141,13 @@ func initWebSocketServer(cfg *config.Configuration, logger *slog.Logger) (*serve
 	userPrefClient := service.NewHTTPUserPreferenceClient(cfg.CoinSetting.Host, logger)
 	wsServer.SetUserPreferenceProvider(userPrefClient)
 
-	messageHandler := wshandler.NewDefaultHandler(wsServer.Hub(), logger)
-
-	wsServer.SetMessageHandler(messageHandler)
-
-	wsServer.Hub().SetOnClientUnregister(func(clientID, cfxUserID string) {
-		messageHandler.OnClientDisconnect(clientID, cfxUserID)
-	})
-
-	return wsServer, messageHandler
+	return wsServer
 }
 
-// initKafkaConsumer creates the Broadcaster and Kafka consumer, wiring the broadcaster to the message handler.
-func initKafkaConsumer(cfg *config.Configuration, transformer service.TransformerInterface, hub *server.Hub, messageHandler *wshandler.DefaultHandler, logger *slog.Logger) (*kafka.KafkaReaderConsumer, error) {
-	broadcaster := kafka.NewBroadcaster(hub, transformer, logger)
-	messageHandler.SetKafkaBroadcaster(broadcaster)
+// initKafkaConsumer creates the Broadcaster and Kafka consumer, wiring the broadcaster to the Centrifuge node.
+func initKafkaConsumer(cfg *config.Configuration, transformer service.TransformerInterface, node interface{}, logger *slog.Logger) (*kafka.KafkaReaderConsumer, *kafka.Broadcaster, error) {
+	// Create the Kafka broadcaster with the Centrifuge node
+	broadcaster := kafka.NewBroadcaster(node.(*centrifuge.Node), transformer, logger)
 
 	kafkaConfig := &kafka.ConsumerConfig{
 		Brokers:           cfg.Kafka.Brokers,
@@ -121,7 +159,12 @@ func initKafkaConsumer(cfg *config.Configuration, transformer service.Transforme
 		Handler:           broadcaster.HandleMessage,
 	}
 
-	return kafka.NewKafkaReaderConsumer(kafkaConfig, logger)
+	consumer, err := kafka.NewKafkaReaderConsumer(kafkaConfig, logger)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return consumer, broadcaster, nil
 }
 
 // initLogger initializes the structured logger with configuration.

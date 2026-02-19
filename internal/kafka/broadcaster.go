@@ -6,7 +6,8 @@ import (
 	"sync"
 
 	"coin-futures-websocket/internal/types"
-	"coin-futures-websocket/internal/websocket/server"
+
+	"github.com/centrifugal/centrifuge"
 )
 
 // Transformer defines the interface for transforming Kafka message data
@@ -21,9 +22,9 @@ type subscribedUser struct {
 	quotePreference string
 }
 
-// Broadcaster handles broadcasting Kafka messages to WebSocket clients
+// Broadcaster handles broadcasting Kafka messages to WebSocket clients via Centrifuge
 type Broadcaster struct {
-	hub         *server.Hub
+	node        *centrifuge.Node
 	transformer Transformer
 	logger      *slog.Logger
 	activeUsers map[string]subscribedUser // Map cfx_user_id -> subscribedUser
@@ -31,9 +32,9 @@ type Broadcaster struct {
 }
 
 // NewBroadcaster creates a new Kafka broadcaster
-func NewBroadcaster(hub *server.Hub, transformer Transformer, logger *slog.Logger) *Broadcaster {
+func NewBroadcaster(node *centrifuge.Node, transformer Transformer, logger *slog.Logger) *Broadcaster {
 	return &Broadcaster{
-		hub:         hub,
+		node:        node,
 		transformer: transformer,
 		logger:      logger,
 		activeUsers: make(map[string]subscribedUser),
@@ -81,13 +82,21 @@ func (b *Broadcaster) handleUserMargin(data []byte) error {
 		if err != nil {
 			b.logger.Error("failed to transform user margin", "error", err)
 			return nil
-		} else {
-			dataToBroadcast = transformedData
 		}
+		dataToBroadcast = transformedData
 	}
 
 	channel := "user:" + user.ajaibID + ":" + types.ChannelMarginSuffix
-	b.hub.Broadcast(channel, dataToBroadcast)
+
+	// Publish to Centrifuge channel
+	_, err := b.node.Publish(channel, dataToBroadcast)
+	if err != nil {
+		b.logger.Error("failed to publish to centrifuge",
+			"channel", channel,
+			"cfx_user_id", cfxUserID,
+			"error", err)
+		return err
+	}
 
 	b.logger.Debug("broadcasted user margin",
 		"cfx_user_id", cfxUserID,
@@ -122,13 +131,21 @@ func (b *Broadcaster) handleUserPosition(data []byte) error {
 		if err != nil {
 			b.logger.Error("failed to transform user position", "error", err)
 			return nil
-		} else {
-			dataToBroadcast = transformedData
 		}
+		dataToBroadcast = transformedData
 	}
 
 	channel := "user:" + user.ajaibID + ":" + types.ChannelPositionSuffix
-	b.hub.Broadcast(channel, dataToBroadcast)
+
+	// Publish to Centrifuge channel
+	_, err := b.node.Publish(channel, dataToBroadcast)
+	if err != nil {
+		b.logger.Error("failed to publish to centrifuge",
+			"channel", channel,
+			"cfx_user_id", cfxUserID,
+			"error", err)
+		return err
+	}
 
 	b.logger.Debug("broadcasted user position",
 		"cfx_user_id", cfxUserID,

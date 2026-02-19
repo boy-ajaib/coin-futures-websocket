@@ -1,6 +1,6 @@
 # Coin Futures Websocket
 
-A Go-based WebSocket client for connecting to the CFX (Coin Futures Exchange) using the Centrifuge protocol.
+A Go-based WebSocket service for connecting to the CFX (Coin Futures Exchange) using the Centrifuge protocol.
 
 ## Usage
 
@@ -40,6 +40,130 @@ Run with development config:
 ```bash
 make run.dev
 ```
+
+## WebSocket Protocol
+
+This service uses the **Centrifuge protocol** for real-time WebSocket communication. Centrifuge is a production-grade messaging protocol with built-in support for:
+
+- Automatic reconnection with exponential backoff
+- Binary and JSON message formats
+- Channel-based subscriptions
+- Server-side push notifications
+
+### Connection Endpoint
+
+```
+ws://localhost:8009/connection
+```
+
+### Authentication
+
+Authentication is done via JWT token. The server supports two methods:
+
+1. **Centrifuge Token Flow** (recommended): Include the token in the connect command
+2. **HTTP Header Flow**: Include the token in `X-Socket-Authorization` header
+
+The JWT payload must contain the Ajaib user ID in the `sub` claim.
+
+### Channel Format
+
+Channels follow this naming convention:
+
+```
+user:{ajaib_id}:{type}
+```
+
+Where `type` can be:
+- `margin` - User margin updates
+- `position` - User position updates
+
+Example channels:
+- `user:130010505:margin`
+- `user:130010505:position`
+
+### Centrifuge Protocol Examples
+
+#### Connect Command
+
+```json
+{
+  "id": 1,
+  "subscribe": {
+    "user:130010505:margin": {}
+  },
+  "token": "eyJ0eXAiOiJBQ0NFU1MiLCJhbGciOiJFUzI1NiJ9.eyJzdWIiOiIxMzAwMTA1MDUiLCJleHAiOjE3NzA4MjA0MDAsImlhdCI6MTc3MDgxOTUwMH0.dummy_signature"
+}
+```
+
+#### Subscribe Command (after connection)
+
+```json
+{
+  "id": 2,
+  "subscribe": {
+    "user:130010505:margin": {}
+  }
+}
+```
+
+```json
+{
+  "id": 3,
+  "subscribe": {
+    "user:130010505:position": {}
+  }
+}
+```
+
+#### Server Push (Publication)
+
+When a margin update occurs, the server pushes:
+
+```json
+{
+  "push": {
+    "channel": "user:130010505:margin",
+    "pub": {
+      "cfx_user_id": "cfx_12345",
+      "asset": "USDT",
+      "margin_balance": "1000.50",
+      "updated_at": 1704067200000
+    }
+  }
+}
+```
+
+### Using Centrifuge Client SDKs
+
+We recommend using official Centrifuge client SDKs instead of raw WebSocket:
+
+**Go Client:**
+```bash
+go get github.com/centrifugal/centrifuge-go
+```
+
+**JavaScript Client:**
+```bash
+npm install centrifuge
+```
+
+See the [Centrifuge documentation](https://centrifugal.dev/) for more details.
+
+### Testing via Postman
+
+To test manually via Postman:
+
+1. Create a new WebSocket request
+2. URL: `ws://localhost:8009/connection`
+3. Headers:
+   - `X-Socket-Authorization: Bearer <your_jwt_token>`
+4. Click "Connect"
+5. After connection, send subscribe commands using Centrifuge protocol format
+
+**Important Notes:**
+- Users can only subscribe to their own channels (validated by ajaib_id in JWT)
+- The connection endpoint is `/connection` (not `/ws`)
+- Messages use Centrifuge protocol format, not custom JSON
 
 ## Database Schemas
 
@@ -94,7 +218,7 @@ Please remember the port since we will need in below.
 
 Create a new file in `config` folder called `development.yml`.
 
-```
+```yaml
 app:
     env: development
     log_level: info
@@ -117,7 +241,6 @@ websocket_server:
     port: 8009
     ping_interval_ms: 2000
     ping_timeout_ms: 30000
-    no_command_timeout_ms: 20000
     max_connections_per_user: 5
     shutdown_timeout_ms: 10000
 
@@ -140,20 +263,3 @@ ENV=development go run cmd/app/main.go
 ```
 
 Running with above command will automatically use `config/development.yml` as our config file.
-
-### Connect and subscribe via Postman
-
-To connect and create a subscription via Postman, we can do this:
-
-- Open the Postman, create new websocket request with this detail:
-  - URL: ws://localhost:8009/ws
-  - Header:
-    - X-Socket-Authorization: Bearer eyJ0eXAiOiJBQ0NFU1MiLCJhbGciOiJFUzI1NiJ9.eyJzdWIiOiIxMzAwMTA1MDUiLCJleHAiOjE3NzA4MjA0MDAsImlhdCI6MTc3MDgxOTUwMH0.dummy_signature
-- Click "Connect"
-- When connected, we can subscribe to the channel by sending this message one by one:
-  - {"type":"subscribe","channel":"user:130010505:margin","id":"sub-1"}
-  - {"type":"subscribe","channel":"user:130010505:position","id":"sub-2"}
-
-NOTES:
-- The header name is using the same name as what our FE used.
-- The JWT is just a normal JWT token. When parsed, we can see ajaib_id stored inside it as "sub". We only parsed it and used the ajaib_id to make sure the ajaib_id in the subscription payload has the same value to avoid user to subscribe to different ajaib_id.
