@@ -13,6 +13,7 @@ require (
 require (
 	github.com/FZambia/eagle v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/centrifugal/centrifuge-go v0.10.11 // indirect
 	github.com/centrifugal/protocol v0.17.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
@@ -21,7 +22,9 @@ require (
 	github.com/gammazero/deque v0.2.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
+	github.com/jpillora/backoff v1.0.0 // indirect
 	github.com/klauspost/compress v1.18.3 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/maypok86/otter v1.2.4 // indirect

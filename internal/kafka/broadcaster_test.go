@@ -49,7 +49,7 @@ func TestNewBroadcaster(t *testing.T) {
 	go func() {
 		_ = node.Run()
 	}()
-	defer node.Shutdown(context.Background())
+	defer func() { _ = node.Shutdown(context.Background()) }()
 
 	transformer := &mockTransformer{}
 	broadcaster := NewBroadcaster(node, transformer, logger)
@@ -73,7 +73,7 @@ func TestRegisterSubscription(t *testing.T) {
 	go func() {
 		_ = node.Run()
 	}()
-	defer node.Shutdown(context.Background())
+	defer func() { _ = node.Shutdown(context.Background()) }()
 
 	transformer := &mockTransformer{}
 	broadcaster := NewBroadcaster(node, transformer, logger)
@@ -100,7 +100,7 @@ func TestUnregisterSubscription(t *testing.T) {
 	go func() {
 		_ = node.Run()
 	}()
-	defer node.Shutdown(context.Background())
+	defer func() { _ = node.Shutdown(context.Background()) }()
 
 	transformer := &mockTransformer{}
 	broadcaster := NewBroadcaster(node, transformer, logger)
@@ -126,7 +126,7 @@ func TestHandleUserMargin(t *testing.T) {
 	go func() {
 		_ = node.Run()
 	}()
-	defer node.Shutdown(context.Background())
+	defer func() { _ = node.Shutdown(context.Background()) }()
 
 	transformer := &mockTransformer{}
 	broadcaster := NewBroadcaster(node, transformer, logger)
@@ -161,7 +161,7 @@ func TestHandleUserPosition(t *testing.T) {
 	go func() {
 		_ = node.Run()
 	}()
-	defer node.Shutdown(context.Background())
+	defer func() { _ = node.Shutdown(context.Background()) }()
 
 	transformer := &mockTransformer{}
 	broadcaster := NewBroadcaster(node, transformer, logger)
@@ -196,7 +196,7 @@ func TestHandleUserMarginNoSubscriber(t *testing.T) {
 	go func() {
 		_ = node.Run()
 	}()
-	defer node.Shutdown(context.Background())
+	defer func() { _ = node.Shutdown(context.Background()) }()
 
 	transformer := &mockTransformer{}
 	broadcaster := NewBroadcaster(node, transformer, logger)
@@ -228,7 +228,7 @@ func TestHandleUserPositionNoSubscriber(t *testing.T) {
 	go func() {
 		_ = node.Run()
 	}()
-	defer node.Shutdown(context.Background())
+	defer func() { _ = node.Shutdown(context.Background()) }()
 
 	transformer := &mockTransformer{}
 	broadcaster := NewBroadcaster(node, transformer, logger)
@@ -263,7 +263,7 @@ func TestHandleUserMarginWithTransformer(t *testing.T) {
 
 	// Give the node a moment to start
 	time.Sleep(10 * time.Millisecond)
-	defer node.Shutdown(context.Background())
+	defer func() { _ = node.Shutdown(context.Background()) }()
 
 	transformerCalled := false
 	transformer := &mockTransformer{
@@ -310,7 +310,7 @@ func TestHandleUserPositionWithTransformer(t *testing.T) {
 
 	// Give the node a moment to start
 	time.Sleep(10 * time.Millisecond)
-	defer node.Shutdown(context.Background())
+	defer func() { _ = node.Shutdown(context.Background()) }()
 
 	transformerCalled := false
 	transformer := &mockTransformer{
@@ -354,7 +354,7 @@ func TestHandleUserMarginInvalidJSON(t *testing.T) {
 	go func() {
 		_ = node.Run()
 	}()
-	defer node.Shutdown(context.Background())
+	defer func() { _ = node.Shutdown(context.Background()) }()
 
 	transformer := &mockTransformer{}
 	broadcaster := NewBroadcaster(node, transformer, logger)
@@ -379,7 +379,7 @@ func TestHandleUserPositionInvalidJSON(t *testing.T) {
 	go func() {
 		_ = node.Run()
 	}()
-	defer node.Shutdown(context.Background())
+	defer func() { _ = node.Shutdown(context.Background()) }()
 
 	transformer := &mockTransformer{}
 	broadcaster := NewBroadcaster(node, transformer, logger)
@@ -404,7 +404,7 @@ func TestHandleMessage(t *testing.T) {
 	go func() {
 		_ = node.Run()
 	}()
-	defer node.Shutdown(context.Background())
+	defer func() { _ = node.Shutdown(context.Background()) }()
 
 	transformer := &mockTransformer{}
 	broadcaster := NewBroadcaster(node, transformer, logger)
@@ -456,7 +456,7 @@ func TestGetSubscribedUser(t *testing.T) {
 	go func() {
 		_ = node.Run()
 	}()
-	defer node.Shutdown(context.Background())
+	defer func() { _ = node.Shutdown(context.Background()) }()
 
 	transformer := &mockTransformer{}
 	broadcaster := NewBroadcaster(node, transformer, logger)
@@ -486,7 +486,7 @@ func TestConcurrentSubscriptionTests(t *testing.T) {
 	go func() {
 		_ = node.Run()
 	}()
-	defer node.Shutdown(context.Background())
+	defer func() { _ = node.Shutdown(context.Background()) }()
 
 	transformer := &mockTransformer{}
 	broadcaster := NewBroadcaster(node, transformer, logger)

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"log/slog"
 	"os"
 
@@ -48,7 +49,7 @@ func (sl *SlogLogger) handle(entry centrifuge.LogEntry) {
 		return
 	}
 
-	sl.logger.Log(nil, level, entry.Message)
+	sl.logger.Log(context.Background(), level, entry.Message)
 }
 
 // enabled returns true if the given log level should be logged
