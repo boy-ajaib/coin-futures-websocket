@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"testing"
-	"time"
 
 	"coin-futures-websocket/internal/types"
 
@@ -14,6 +13,19 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// createTestNode creates a Centrifuge node and runs it, ensuring it is fully initialized
+func createTestNode(t *testing.T) *centrifuge.Node {
+	t.Helper()
+	node, err := centrifuge.New(centrifuge.Config{
+		LogLevel: centrifuge.LogLevelNone,
+	})
+	require.NoError(t, err)
+	require.NoError(t, node.Run())
+
+	t.Cleanup(func() { _ = node.Shutdown(context.Background()) })
+	return node
+}
 
 // mockTransformer is a mock implementation of the Transformer interface
 type mockTransformer struct {
@@ -40,16 +52,7 @@ func (m *mockTransformer) TransformUserPosition(data []byte, cfxUserID string, q
 // TestNewBroadcaster tests creating a new broadcaster
 func TestNewBroadcaster(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	node, err := centrifuge.New(centrifuge.Config{
-		LogLevel: centrifuge.LogLevelNone,
-	})
-	require.NoError(t, err)
-
-	// Run the node in background
-	go func() {
-		_ = node.Run()
-	}()
-	defer func() { _ = node.Shutdown(context.Background()) }()
+	node := createTestNode(t)
 
 	transformer := &mockTransformer{}
 	broadcaster := NewBroadcaster(node, transformer, logger)
@@ -64,16 +67,7 @@ func TestNewBroadcaster(t *testing.T) {
 // TestRegisterSubscription tests registering a subscription
 func TestRegisterSubscription(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	node, err := centrifuge.New(centrifuge.Config{
-		LogLevel: centrifuge.LogLevelNone,
-	})
-	require.NoError(t, err)
-
-	// Run the node in background
-	go func() {
-		_ = node.Run()
-	}()
-	defer func() { _ = node.Shutdown(context.Background()) }()
+	node := createTestNode(t)
 
 	transformer := &mockTransformer{}
 	broadcaster := NewBroadcaster(node, transformer, logger)
@@ -91,16 +85,7 @@ func TestRegisterSubscription(t *testing.T) {
 // TestUnregisterSubscription tests unregistering a subscription
 func TestUnregisterSubscription(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	node, err := centrifuge.New(centrifuge.Config{
-		LogLevel: centrifuge.LogLevelNone,
-	})
-	require.NoError(t, err)
-
-	// Run the node in background
-	go func() {
-		_ = node.Run()
-	}()
-	defer func() { _ = node.Shutdown(context.Background()) }()
+	node := createTestNode(t)
 
 	transformer := &mockTransformer{}
 	broadcaster := NewBroadcaster(node, transformer, logger)
@@ -117,16 +102,7 @@ func TestUnregisterSubscription(t *testing.T) {
 // TestHandleUserMargin tests handling user margin messages
 func TestHandleUserMargin(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	node, err := centrifuge.New(centrifuge.Config{
-		LogLevel: centrifuge.LogLevelNone,
-	})
-	require.NoError(t, err)
-
-	// Run the node in background
-	go func() {
-		_ = node.Run()
-	}()
-	defer func() { _ = node.Shutdown(context.Background()) }()
+	node := createTestNode(t)
 
 	transformer := &mockTransformer{}
 	broadcaster := NewBroadcaster(node, transformer, logger)
@@ -152,16 +128,7 @@ func TestHandleUserMargin(t *testing.T) {
 // TestHandleUserPosition tests handling user position messages
 func TestHandleUserPosition(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	node, err := centrifuge.New(centrifuge.Config{
-		LogLevel: centrifuge.LogLevelNone,
-	})
-	require.NoError(t, err)
-
-	// Run the node in background
-	go func() {
-		_ = node.Run()
-	}()
-	defer func() { _ = node.Shutdown(context.Background()) }()
+	node := createTestNode(t)
 
 	transformer := &mockTransformer{}
 	broadcaster := NewBroadcaster(node, transformer, logger)
@@ -187,16 +154,7 @@ func TestHandleUserPosition(t *testing.T) {
 // TestHandleUserMarginNoSubscriber tests handling messages when no subscribers exist
 func TestHandleUserMarginNoSubscriber(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	node, err := centrifuge.New(centrifuge.Config{
-		LogLevel: centrifuge.LogLevelNone,
-	})
-	require.NoError(t, err)
-
-	// Run the node in background
-	go func() {
-		_ = node.Run()
-	}()
-	defer func() { _ = node.Shutdown(context.Background()) }()
+	node := createTestNode(t)
 
 	transformer := &mockTransformer{}
 	broadcaster := NewBroadcaster(node, transformer, logger)
@@ -219,16 +177,7 @@ func TestHandleUserMarginNoSubscriber(t *testing.T) {
 // TestHandleUserPositionNoSubscriber tests handling position messages when no subscribers exist
 func TestHandleUserPositionNoSubscriber(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	node, err := centrifuge.New(centrifuge.Config{
-		LogLevel: centrifuge.LogLevelNone,
-	})
-	require.NoError(t, err)
-
-	// Run the node in background
-	go func() {
-		_ = node.Run()
-	}()
-	defer func() { _ = node.Shutdown(context.Background()) }()
+	node := createTestNode(t)
 
 	transformer := &mockTransformer{}
 	broadcaster := NewBroadcaster(node, transformer, logger)
@@ -251,19 +200,7 @@ func TestHandleUserPositionNoSubscriber(t *testing.T) {
 // TestHandleUserMarginWithTransformer tests that the transformer is called
 func TestHandleUserMarginWithTransformer(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	node, err := centrifuge.New(centrifuge.Config{
-		LogLevel: centrifuge.LogLevelNone,
-	})
-	require.NoError(t, err)
-
-	// Run the node in background
-	go func() {
-		_ = node.Run()
-	}()
-
-	// Give the node a moment to start
-	time.Sleep(10 * time.Millisecond)
-	defer func() { _ = node.Shutdown(context.Background()) }()
+	node := createTestNode(t)
 
 	transformerCalled := false
 	transformer := &mockTransformer{
@@ -298,19 +235,7 @@ func TestHandleUserMarginWithTransformer(t *testing.T) {
 // TestHandleUserPositionWithTransformer tests that the transformer is called for positions
 func TestHandleUserPositionWithTransformer(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	node, err := centrifuge.New(centrifuge.Config{
-		LogLevel: centrifuge.LogLevelNone,
-	})
-	require.NoError(t, err)
-
-	// Run the node in background
-	go func() {
-		_ = node.Run()
-	}()
-
-	// Give the node a moment to start
-	time.Sleep(10 * time.Millisecond)
-	defer func() { _ = node.Shutdown(context.Background()) }()
+	node := createTestNode(t)
 
 	transformerCalled := false
 	transformer := &mockTransformer{
@@ -345,16 +270,7 @@ func TestHandleUserPositionWithTransformer(t *testing.T) {
 // TestHandleUserMarginInvalidJSON tests handling messages with invalid JSON
 func TestHandleUserMarginInvalidJSON(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	node, err := centrifuge.New(centrifuge.Config{
-		LogLevel: centrifuge.LogLevelNone,
-	})
-	require.NoError(t, err)
-
-	// Run the node in background
-	go func() {
-		_ = node.Run()
-	}()
-	defer func() { _ = node.Shutdown(context.Background()) }()
+	node := createTestNode(t)
 
 	transformer := &mockTransformer{}
 	broadcaster := NewBroadcaster(node, transformer, logger)
@@ -363,23 +279,14 @@ func TestHandleUserMarginInvalidJSON(t *testing.T) {
 	broadcaster.RegisterSubscription("cfx_123", "ajaib_456", "USD")
 
 	// Invalid JSON
-	err = broadcaster.handleUserMargin([]byte("invalid json"))
+	err := broadcaster.handleUserMargin([]byte("invalid json"))
 	assert.Error(t, err)
 }
 
 // TestHandleUserPositionInvalidJSON tests handling position messages with invalid JSON
 func TestHandleUserPositionInvalidJSON(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	node, err := centrifuge.New(centrifuge.Config{
-		LogLevel: centrifuge.LogLevelNone,
-	})
-	require.NoError(t, err)
-
-	// Run the node in background
-	go func() {
-		_ = node.Run()
-	}()
-	defer func() { _ = node.Shutdown(context.Background()) }()
+	node := createTestNode(t)
 
 	transformer := &mockTransformer{}
 	broadcaster := NewBroadcaster(node, transformer, logger)
@@ -388,23 +295,14 @@ func TestHandleUserPositionInvalidJSON(t *testing.T) {
 	broadcaster.RegisterSubscription("cfx_123", "ajaib_456", "USD")
 
 	// Invalid JSON
-	err = broadcaster.handleUserPosition([]byte("invalid json"))
+	err := broadcaster.handleUserPosition([]byte("invalid json"))
 	assert.Error(t, err)
 }
 
 // TestHandleMessage tests the HandleMessage router
 func TestHandleMessage(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	node, err := centrifuge.New(centrifuge.Config{
-		LogLevel: centrifuge.LogLevelNone,
-	})
-	require.NoError(t, err)
-
-	// Run the node in background
-	go func() {
-		_ = node.Run()
-	}()
-	defer func() { _ = node.Shutdown(context.Background()) }()
+	node := createTestNode(t)
 
 	transformer := &mockTransformer{}
 	broadcaster := NewBroadcaster(node, transformer, logger)
@@ -447,16 +345,7 @@ func TestHandleMessage(t *testing.T) {
 // TestGetSubscribedUser tests retrieving subscribed users
 func TestGetSubscribedUser(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	node, err := centrifuge.New(centrifuge.Config{
-		LogLevel: centrifuge.LogLevelNone,
-	})
-	require.NoError(t, err)
-
-	// Run the node in background
-	go func() {
-		_ = node.Run()
-	}()
-	defer func() { _ = node.Shutdown(context.Background()) }()
+	node := createTestNode(t)
 
 	transformer := &mockTransformer{}
 	broadcaster := NewBroadcaster(node, transformer, logger)
@@ -477,16 +366,7 @@ func TestGetSubscribedUser(t *testing.T) {
 // TestConcurrentSubscriptionTests tests concurrent access to subscriptions
 func TestConcurrentSubscriptionTests(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	node, err := centrifuge.New(centrifuge.Config{
-		LogLevel: centrifuge.LogLevelNone,
-	})
-	require.NoError(t, err)
-
-	// Run the node in background
-	go func() {
-		_ = node.Run()
-	}()
-	defer func() { _ = node.Shutdown(context.Background()) }()
+	node := createTestNode(t)
 
 	transformer := &mockTransformer{}
 	broadcaster := NewBroadcaster(node, transformer, logger)
