@@ -14,6 +14,7 @@ kafka:
     initial_offset: latest
     session_timeout: 10000
     heartbeat_interval: 1000
+    max_message_age_ms: 5000
 
 websocket_server:
     enabled: true

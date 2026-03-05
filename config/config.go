@@ -31,6 +31,7 @@ type (
 		InitialOffset     string   `mapstructure:"initial_offset"`
 		SessionTimeout    int      `mapstructure:"session_timeout"`
 		HeartbeatInterval int      `mapstructure:"heartbeat_interval"`
+		MaxMessageAgeMs   int      `mapstructure:"max_message_age_ms"`
 	}
 
 	WebSocketServerConfiguration struct {

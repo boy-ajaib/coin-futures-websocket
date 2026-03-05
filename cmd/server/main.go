@@ -157,6 +157,7 @@ func initKafkaConsumer(cfg *config.Configuration, transformer service.Transforme
 		SessionTimeout:    time.Duration(cfg.Kafka.SessionTimeout) * time.Millisecond,
 		HeartbeatInterval: time.Duration(cfg.Kafka.HeartbeatInterval) * time.Millisecond,
 		Handler:           broadcaster.HandleMessage,
+		MaxMessageAge:     time.Duration(cfg.Kafka.MaxMessageAgeMs) * time.Millisecond,
 	}
 
 	consumer, err := kafka.NewKafkaReaderConsumer(kafkaConfig, logger)
