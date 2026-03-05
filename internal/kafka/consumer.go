@@ -22,6 +22,7 @@ type Consumer interface {
 type ConsumerStats struct {
 	MessagesConsumed int64
 	MessagesErrors   int64
+	MessagesStale    int64
 	LastMessageTime  time.Time
 	Connected        bool
 }
@@ -31,12 +32,13 @@ type MessageHandler func(topic string, key []byte, value []byte) error
 
 // KafkaReaderConsumer implements the Consumer interface using segmentio/kafka-go
 type KafkaReaderConsumer struct {
-	brokers []string
-	groupID string
-	topics  []string
-	handler MessageHandler
-	reader  *kafka.Reader
-	logger  *slog.Logger
+	brokers       []string
+	groupID       string
+	topics        []string
+	handler       MessageHandler
+	reader        *kafka.Reader
+	logger        *slog.Logger
+	maxMessageAge time.Duration
 
 	stats   ConsumerStats
 	statsMu sync.RWMutex
@@ -58,6 +60,7 @@ type ConsumerConfig struct {
 	FetchMin          int32
 	FetchMax          int32
 	FetchDefault      int32
+	MaxMessageAge     time.Duration
 }
 
 // NewKafkaReaderConsumer creates a new Kafka consumer using kafka-go
@@ -89,11 +92,12 @@ func NewKafkaReaderConsumer(config *ConsumerConfig, logger *slog.Logger) (*Kafka
 	startOffset := getInitialOffset(config.InitialOffset)
 
 	consumer := &KafkaReaderConsumer{
-		brokers: config.Brokers,
-		groupID: config.GroupID,
-		topics:  config.Topics,
-		handler: config.Handler,
-		logger:  logger,
+		brokers:       config.Brokers,
+		groupID:       config.GroupID,
+		topics:        config.Topics,
+		handler:       config.Handler,
+		logger:        logger,
+		maxMessageAge: config.MaxMessageAge,
 		stats: ConsumerStats{
 			Connected: false,
 		},
@@ -150,6 +154,26 @@ func (c *KafkaReaderConsumer) Start(ctx context.Context) error {
 
 					c.logger.Error("error fetching message", "error", err)
 					c.incrementMessagesErrors()
+					continue
+				}
+
+				// Skip stale messages when max age is configured
+				if c.maxMessageAge > 0 && !msg.Time.IsZero() && time.Since(msg.Time) > c.maxMessageAge {
+					c.logger.Warn("skipping stale kafka message",
+						"topic", msg.Topic,
+						"partition", msg.Partition,
+						"offset", msg.Offset,
+						"message_time", msg.Time,
+						"age", time.Since(msg.Time).String(),
+						"max_age", c.maxMessageAge.String())
+
+					c.incrementStaleMessages()
+					if err := c.reader.CommitMessages(ctx, msg); err != nil {
+						c.logger.Error("error committing stale message",
+							"topic", msg.Topic,
+							"offset", msg.Offset,
+							"error", err)
+					}
 					continue
 				}
 
@@ -213,6 +237,13 @@ func (c *KafkaReaderConsumer) incrementMessagesConsumed() {
 	defer c.statsMu.Unlock()
 	c.stats.MessagesConsumed++
 	c.stats.LastMessageTime = time.Now()
+}
+
+// incrementStaleMessages increments the stale message counter
+func (c *KafkaReaderConsumer) incrementStaleMessages() {
+	c.statsMu.Lock()
+	defer c.statsMu.Unlock()
+	c.stats.MessagesStale++
 }
 
 // incrementMessagesErrors increments the error counter

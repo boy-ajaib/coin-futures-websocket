@@ -14,15 +14,35 @@ kafka:
     initial_offset: latest
     session_timeout: 10000
     heartbeat_interval: 1000
+    max_message_age_ms: 5000
 
 websocket_server:
     enabled: true
     port: 8009
     ping_interval_ms: 2000
     ping_timeout_ms: 30000
-    no_command_timeout_ms: 20000
     max_connections_per_user: 5
     shutdown_timeout_ms: 10000
+
+centrifuge:
+    node_name: coin-futures-websocket
+    namespace: coin-futures-websocket
+    log_level: info
+    client_insecure: false
+    client_announce: true
+    presence: false
+    join_leave: false
+    history_size: 0
+    history_ttl_seconds: 0
+    force_recovery: false
+    redis_broker:
+        enabled: true
+        address: "127.0.0.1:6379"
+        password: ""
+        db: 0
+        prefix: "coin-futures-websocket"
+        connect_timeout_ms: 1000
+        io_timeout_ms: 4000
 
 coin_cfx_adapter:
     host: http://coin-cfx-adapter.stg.ajaib.int
