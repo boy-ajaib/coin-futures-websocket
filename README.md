@@ -12,13 +12,16 @@ Usage:
 
 Targets:
   help              Show this help message
-  run               Run the app using default config
-  run.dev           Run the app using development config
+  run               Run the server using default config
+  run.dev           Run the server using development config
   test              Run the tests of the project
-  test.verbose      Run the tests of the project (verbose)
+  test.race         Run the tests of the project while also checking race conditions
+  test.verbose      Run the tests of the project while also checking race conditions (verbose)
   test.coverage     Run the tests of the project and export the coverage
   fmt               Format '*.go' files with gofumpt
-  build             Build the app
+  lint              Run linter using golangci-lint
+  lint.fix          Run linter using golangci-lint and fix it
+  build             Build the server
 ```
 
 ## Building
@@ -38,6 +41,12 @@ $ make run
 Run with development config:
 
 ```bash
+# copy the default config to development config
+cp ./config/config.yml ./config/development.yml
+
+# make some changes to the development config
+
+# run the server with development config
 make run.dev
 ```
 
@@ -81,61 +90,9 @@ Example channels:
 - `user:130010505:margin`
 - `user:130010505:position`
 
-### Centrifuge Protocol Examples
+### Centrifuge Client SDKs
 
-#### Connect Command
-
-```json
-{
-  "id": 1,
-  "subscribe": {
-    "user:130010505:margin": {}
-  },
-  "token": "eyJ0eXAiOiJBQ0NFU1MiLCJhbGciOiJFUzI1NiJ9.eyJzdWIiOiIxMzAwMTA1MDUiLCJleHAiOjE3NzA4MjA0MDAsImlhdCI6MTc3MDgxOTUwMH0.dummy_signature"
-}
-```
-
-#### Subscribe Command (after connection)
-
-```json
-{
-  "id": 2,
-  "subscribe": {
-    "user:130010505:margin": {}
-  }
-}
-```
-
-```json
-{
-  "id": 3,
-  "subscribe": {
-    "user:130010505:position": {}
-  }
-}
-```
-
-#### Server Push (Publication)
-
-When a margin update occurs, the server pushes:
-
-```json
-{
-  "push": {
-    "channel": "user:130010505:margin",
-    "pub": {
-      "cfx_user_id": "cfx_12345",
-      "asset": "USDT",
-      "margin_balance": "1000.50",
-      "updated_at": 1704067200000
-    }
-  }
-}
-```
-
-### Using Centrifuge Client SDKs
-
-We recommend using official Centrifuge client SDKs instead of raw WebSocket:
+Centrifuge uses its own binary protocol over WebSocket, so raw WebSocket clients (like Postman) won't work. Use the official Centrifuge client SDKs:
 
 **Go Client:**
 ```bash
@@ -149,21 +106,18 @@ npm install centrifuge
 
 See the [Centrifuge documentation](https://centrifugal.dev/) for more details.
 
+### Testing via an example client
+
+We have prepared an example client in `cmd/client` folder. Please follow the instructions in `cmd/client/README.md` to test the server.
+
+To summarize:
+1. Generate a JWT token for the user via `./cmd/client/token-gen.sh <ajaib_id>`
+2. Run the client via `go run cmd/client/main.go -token <jwt_token> -endpoint ws://localhost:8009/connection -ajaib-id <ajaib_id>`
+3. Check the redis broker via `redis-cli MONITOR | grep "coin-futures-websocket-dev"`
+
 ### Testing via Postman
 
-To test manually via Postman:
-
-1. Create a new WebSocket request
-2. URL: `ws://localhost:8009/connection`
-3. Headers:
-   - `X-Socket-Authorization: Bearer <your_jwt_token>`
-4. Click "Connect"
-5. After connection, send subscribe commands using Centrifuge protocol format
-
-**Important Notes:**
-- Users can only subscribe to their own channels (validated by ajaib_id in JWT)
-- The connection endpoint is `/connection` (not `/ws`)
-- Messages use Centrifuge protocol format, not custom JSON
+Centrifuge cannot be tested via Postman. Please use the Centrifuge client SDKs to test the server.
 
 ## Database Schemas
 
@@ -212,16 +166,16 @@ To test manually via Postman:
 mvn clean install -DskipTests && mvn spring-boot:run -pl ap
 ```
 
-Please remember the port since we will need in below.
+Please remember the port since we will need it below.
 
 ### Run coin-futures-websocket
 
-Create a new file in `config` folder called `development.yml`.
+Create a new file in `config` folder called `development.yml`. The example content might be changed, please refer to `config/config.yml` for the default config.
 
 ```yaml
 app:
     env: development
-    log_level: info
+    log_level: debug
 
 kafka:
     brokers:
@@ -235,6 +189,7 @@ kafka:
     initial_offset: latest
     session_timeout: 10000
     heartbeat_interval: 1000
+    max_message_age_ms: 5000
 
 websocket_server:
     enabled: true
@@ -244,14 +199,37 @@ websocket_server:
     max_connections_per_user: 5
     shutdown_timeout_ms: 10000
 
+centrifuge:
+    node_name: coin-futures-websocket-dev
+    namespace: coin-futures-websocket-dev
+    log_level: debug
+    client_insecure: true
+    client_announce: true
+    presence: false
+    join_leave: false
+    history_size: 0
+    history_ttl_seconds: 0
+    force_recovery: false
+    redis_broker:
+        enabled: true
+        address: "127.0.0.1:6379"
+        password: ""
+        db: 0
+        prefix: "coin-futures-websocket-dev"
+        connect_timeout_ms: 1000
+        io_timeout_ms: 4000
+
 coin_cfx_adapter:
     host: http://localhost:8889
     cache_ttl_seconds: 60
 
 coin_data:
     host: http://coin-data-svc.stg.ajaib.int
-    cache_ttl_seconds: 5
-    cfx_usdt_asset: "TEST"
+    cache_ttl_seconds: 60
+    cfx_usdt_asset: "USDT"
+
+coin_setting:
+    host: http://coin-setting-svc.stg.ajaib.int
 ```
 
 Now, we run `coin-futures-websocket`.
@@ -259,7 +237,7 @@ Now, we run `coin-futures-websocket`.
 ```sh
 make run.dev
 # or
-ENV=development go run cmd/app/main.go
+ENV=development go run cmd/server/main.go
 ```
 
 Running with above command will automatically use `config/development.yml` as our config file.
