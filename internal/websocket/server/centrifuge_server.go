@@ -80,6 +80,35 @@ func NewCentrifugeServer(cfg *config.CentrifugeConfiguration, logger *slog.Logge
 		panic(err)
 	}
 
+	// Setup Redis broker for cross-pod message delivery if enabled
+	if cfg.RedisBroker.Enabled {
+		shard, err := centrifuge.NewRedisShard(node, centrifuge.RedisShardConfig{
+			Address:        cfg.RedisBroker.Address,
+			Password:       cfg.RedisBroker.Password,
+			DB:             cfg.RedisBroker.DB,
+			ConnectTimeout: time.Duration(cfg.RedisBroker.ConnectTimeout) * time.Millisecond,
+			IOTimeout:      time.Duration(cfg.RedisBroker.IOTimeout) * time.Millisecond,
+		})
+		if err != nil {
+			logger.Error("failed to create redis shard", "error", err)
+			panic(err)
+		}
+
+		broker, err := centrifuge.NewRedisBroker(node, centrifuge.RedisBrokerConfig{
+			Prefix: cfg.RedisBroker.Prefix,
+			Shards: []*centrifuge.RedisShard{shard},
+		})
+		if err != nil {
+			logger.Error("failed to create redis broker", "error", err)
+			panic(err)
+		}
+
+		node.SetBroker(broker)
+		logger.Info("centrifuge redis broker enabled", "address", cfg.RedisBroker.Address, "prefix", cfg.RedisBroker.Prefix)
+	} else {
+		logger.Info("centrifuge using in-memory broker (redis broker disabled)")
+	}
+
 	// Create WebSocket handler
 	wsCfg := centrifuge.WebsocketConfig{
 		CheckOrigin: func(r *http.Request) bool {

@@ -46,6 +46,16 @@ type (
 		ShutdownTimeoutMs     int    `mapstructure:"shutdown_timeout_ms"`
 	}
 
+	RedisBrokerConfiguration struct {
+		Enabled        bool   `mapstructure:"enabled"`
+		Address        string `mapstructure:"address"`
+		Password       string `mapstructure:"password"`
+		DB             int    `mapstructure:"db"`
+		Prefix         string `mapstructure:"prefix"`
+		ConnectTimeout int    `mapstructure:"connect_timeout_ms"`
+		IOTimeout      int    `mapstructure:"io_timeout_ms"`
+	}
+
 	CentrifugeConfiguration struct {
 		// NodeName is the unique identifier for this Centrifuge node
 		NodeName string `mapstructure:"node_name"`
@@ -76,6 +86,9 @@ type (
 
 		// ForceRecovery enables position recovery for clients
 		ForceRecovery bool `mapstructure:"force_recovery"`
+
+		// RedisBroker configures Redis-based broker for cross-pod message delivery
+		RedisBroker RedisBrokerConfiguration `mapstructure:"redis_broker"`
 	}
 
 	CoinCfxAdapterConfiguration struct {

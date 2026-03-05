@@ -24,8 +24,8 @@ websocket_server:
     shutdown_timeout_ms: 10000
 
 centrifuge:
-    node_name: coin-futures-ws
-    namespace: coin-futures
+    node_name: coin-futures-websocket
+    namespace: coin-futures-websocket
     log_level: info
     client_insecure: false
     client_announce: true
@@ -34,6 +34,14 @@ centrifuge:
     history_size: 0
     history_ttl_seconds: 0
     force_recovery: false
+    redis_broker:
+        enabled: true
+        address: "127.0.0.1:6379"
+        password: ""
+        db: 0
+        prefix: "coin-futures-websocket"
+        connect_timeout_ms: 1000
+        io_timeout_ms: 4000
 
 coin_cfx_adapter:
     host: http://coin-cfx-adapter.stg.ajaib.int
