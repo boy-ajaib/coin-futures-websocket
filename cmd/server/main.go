@@ -137,6 +137,7 @@ func initTransformer(cfg *config.Configuration, logger *slog.Logger) (service.Tr
 // initCentrifugeServer creates the Centrifuge WebSocket server.
 func initCentrifugeServer(cfg *config.Configuration, logger *slog.Logger) *server.CentrifugeServer {
 	wsServer := server.NewCentrifugeServer(&cfg.Centrifuge, logger)
+	wsServer.SetMaxConnectionsPerUser(cfg.WebSocketServer.MaxConnectionsPerUser)
 
 	cfxCacheTTL := time.Duration(cfg.CoinCfxAdapter.CacheTTLSeconds) * time.Second
 	cfxUserMappingClient := service.NewHTTPCfxUserMappingClient(cfg.CoinCfxAdapter.Host, cfxCacheTTL, logger)

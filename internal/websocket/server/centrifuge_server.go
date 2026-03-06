@@ -36,6 +36,9 @@ type CentrifugeServer struct {
 	logger    *slog.Logger
 	metrics   *Metrics
 
+	// Configuration
+	maxConnectionsPerUser int
+
 	// Dependencies for handlers
 	cfxUserMapper    CfxUserMapper
 	userPrefProvider UserPreferenceProvider
@@ -142,6 +145,11 @@ func (s *CentrifugeServer) SetUserPreferenceProvider(provider UserPreferenceProv
 // SetBroadcaster sets the Kafka broadcaster for subscription tracking
 func (s *CentrifugeServer) SetBroadcaster(broadcaster KafkaBroadcaster) {
 	s.broadcaster = broadcaster
+}
+
+// SetMaxConnectionsPerUser sets the maximum number of concurrent connections per user
+func (s *CentrifugeServer) SetMaxConnectionsPerUser(max int) {
+	s.maxConnectionsPerUser = max
 }
 
 // SetMetrics sets the metrics collector for the server

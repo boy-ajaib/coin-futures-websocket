@@ -63,6 +63,19 @@ func (s *CentrifugeServer) handleConnect(ctx context.Context, e centrifuge.Conne
 		return reply, NewError(CodeUnauthorized, DisconnectReasons.Unauthorized())
 	}
 
+	// Enforce per-user connection limit
+	if s.maxConnectionsPerUser > 0 {
+		existingConns := s.node.Hub().UserConnections(ajaibID)
+		if len(existingConns) >= s.maxConnectionsPerUser {
+			s.logger.Warn("connection limit reached",
+				"client_id", e.ClientID,
+				"ajaib_id", ajaibID,
+				"current_connections", len(existingConns),
+				"max_connections", s.maxConnectionsPerUser)
+			return reply, NewError(CodeConnectionLimit, DisconnectReasons.ConnectionLimit())
+		}
+	}
+
 	// Resolve CFX user ID
 	cfxUserID, err := s.resolveCfxUserID(ctx, ajaibID)
 	if err != nil {
