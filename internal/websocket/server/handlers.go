@@ -64,7 +64,7 @@ func (s *CentrifugeServer) handleConnect(ctx context.Context, e centrifuge.Conne
 	}
 
 	// Resolve CFX user ID
-	cfxUserID, err := s.resolveCfxUserID(ajaibID)
+	cfxUserID, err := s.resolveCfxUserID(ctx, ajaibID)
 	if err != nil {
 		s.logger.Error("failed to resolve cfx user id",
 			"client_id", e.ClientID,
@@ -74,7 +74,7 @@ func (s *CentrifugeServer) handleConnect(ctx context.Context, e centrifuge.Conne
 	}
 
 	// Fetch user quote preference
-	quotePreference, err := s.resolveQuotePreference(ajaibID)
+	quotePreference, err := s.resolveQuotePreference(ctx, ajaibID)
 	if err != nil {
 		s.logger.Error("failed to fetch user quote preference",
 			"client_id", e.ClientID,
@@ -273,7 +273,7 @@ func (s *CentrifugeServer) extractTokenFromContext(ctx context.Context, e centri
 }
 
 // resolveCfxUserID maps an Ajaib ID string to a CFX user ID via the configured mapper
-func (s *CentrifugeServer) resolveCfxUserID(ajaibID string) (string, error) {
+func (s *CentrifugeServer) resolveCfxUserID(ctx context.Context, ajaibID string) (string, error) {
 	if ajaibID == "" || s.cfxUserMapper == nil {
 		return "", fmt.Errorf("ajaib_id is empty or cfx user mapper is not configured")
 	}
@@ -283,7 +283,7 @@ func (s *CentrifugeServer) resolveCfxUserID(ajaibID string) (string, error) {
 		return "", fmt.Errorf("invalid ajaib_id format: %w", err)
 	}
 
-	cfxUserID, err := s.cfxUserMapper.GetCfxUserID(context.Background(), id)
+	cfxUserID, err := s.cfxUserMapper.GetCfxUserID(ctx, id)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve ajaib_id to cfx_user_id: %w", err)
 	}
@@ -292,12 +292,12 @@ func (s *CentrifugeServer) resolveCfxUserID(ajaibID string) (string, error) {
 }
 
 // resolveQuotePreference fetches the user's futures quote preference via the configured provider
-func (s *CentrifugeServer) resolveQuotePreference(ajaibID string) (string, error) {
+func (s *CentrifugeServer) resolveQuotePreference(ctx context.Context, ajaibID string) (string, error) {
 	if ajaibID == "" || s.userPrefProvider == nil {
 		return "", nil
 	}
 
-	pref, err := s.userPrefProvider.GetQuotePreference(context.Background(), ajaibID)
+	pref, err := s.userPrefProvider.GetQuotePreference(ctx, ajaibID)
 	if err != nil {
 		return "", err
 	}

@@ -231,7 +231,7 @@ func TestResolveCfxUserID(t *testing.T) {
 	server := NewCentrifugeServer(cfg, logger)
 
 	// Test without mapper
-	cfxID, err := server.resolveCfxUserID("12345")
+	cfxID, err := server.resolveCfxUserID(context.Background(), "12345")
 	assert.Error(t, err)
 	assert.Empty(t, cfxID)
 
@@ -239,12 +239,12 @@ func TestResolveCfxUserID(t *testing.T) {
 	mapper := &mockCfxUserMapper{cfxUserID: "cfx_123"}
 	server.SetCfxUserMapper(mapper)
 
-	cfxID, err = server.resolveCfxUserID("12345")
+	cfxID, err = server.resolveCfxUserID(context.Background(), "12345")
 	assert.NoError(t, err)
 	assert.Equal(t, "cfx_123", cfxID)
 
 	// Test with invalid Ajaib ID
-	cfxID, err = server.resolveCfxUserID("invalid")
+	cfxID, err = server.resolveCfxUserID(context.Background(), "invalid")
 	assert.Error(t, err)
 	assert.Empty(t, cfxID)
 
@@ -252,7 +252,7 @@ func TestResolveCfxUserID(t *testing.T) {
 	errorMapper := &mockCfxUserMapper{err: assert.AnError}
 	server.SetCfxUserMapper(errorMapper)
 
-	cfxID, err = server.resolveCfxUserID("12345")
+	cfxID, err = server.resolveCfxUserID(context.Background(), "12345")
 	assert.Error(t, err)
 	assert.Empty(t, cfxID)
 }
@@ -269,7 +269,7 @@ func TestResolveQuotePreference(t *testing.T) {
 	server := NewCentrifugeServer(cfg, logger)
 
 	// Test without provider
-	pref, err := server.resolveQuotePreference("12345")
+	pref, err := server.resolveQuotePreference(context.Background(), "12345")
 	assert.NoError(t, err) // No error when provider is nil
 	assert.Empty(t, pref)
 
@@ -277,7 +277,7 @@ func TestResolveQuotePreference(t *testing.T) {
 	prefProvider := &mockUserPreferenceProvider{preference: "USD"}
 	server.SetUserPreferenceProvider(prefProvider)
 
-	pref, err = server.resolveQuotePreference("12345")
+	pref, err = server.resolveQuotePreference(context.Background(), "12345")
 	assert.NoError(t, err)
 	assert.Equal(t, "USD", pref)
 
@@ -285,7 +285,7 @@ func TestResolveQuotePreference(t *testing.T) {
 	errorProvider := &mockUserPreferenceProvider{err: assert.AnError}
 	server.SetUserPreferenceProvider(errorProvider)
 
-	pref, err = server.resolveQuotePreference("12345")
+	pref, err = server.resolveQuotePreference(context.Background(), "12345")
 	assert.Error(t, err)
 	assert.Empty(t, pref)
 }
