@@ -57,34 +57,32 @@ func main() {
 	}()
 
 	// Start Centrifuge WebSocket server
+	if err := wsServer.Start(); err != nil {
+		logger.Error("failed to start WebSocket server", "error", err)
+		os.Exit(1)
+	}
+
+	// Setup HTTP routes
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, `{"status":"ok","connections":%d}`, wsServer.GetClientCount())
+	})
+	mux.HandleFunc("/connection", wsServer.ServeHTTP)
+	wsServer.SetupMetricsHandler(mux, "/metrics")
+
+	// Create HTTP server (accessible for graceful shutdown)
+	httpServer := &http.Server{
+		Addr:         fmt.Sprintf(":%d", cfg.WebSocketServer.Port),
+		Handler:      mux,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	// Start HTTP server in background
 	go func() {
-		if err := wsServer.Start(); err != nil && err != http.ErrServerClosed {
-			logger.Error("WebSocket server error", "error", err)
-		}
-	}()
-
-	// Start HTTP server for WebSocket endpoint
-	go func() {
-		mux := http.NewServeMux()
-		mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			fmt.Fprintf(w, `{"status":"ok","connections":%d}`, wsServer.GetClientCount())
-		})
-		mux.HandleFunc("/connection", wsServer.ServeHTTP)
-
-		// Setup metrics endpoint
-		wsServer.SetupMetricsHandler(mux, "/metrics")
-
-		addr := fmt.Sprintf(":%d", cfg.WebSocketServer.Port)
-		httpServer := &http.Server{
-			Addr:         addr,
-			Handler:      mux,
-			ReadTimeout:  30 * time.Second,
-			WriteTimeout: 30 * time.Second,
-			IdleTimeout:  60 * time.Second,
-		}
-
 		logger.Info("HTTP server listening", "port", cfg.WebSocketServer.Port)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Error("HTTP server error", "error", err)
@@ -102,6 +100,11 @@ func main() {
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), time.Duration(cfg.WebSocketServer.ShutdownTimeoutMs)*time.Millisecond)
 	defer shutdownCancel()
+
+	// Shutdown HTTP server first (stop accepting new connections)
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		logger.Error("error shutting down HTTP server", "error", err)
+	}
 
 	// Shutdown Centrifuge WebSocket server
 	if err := wsServer.Shutdown(shutdownCtx); err != nil {
@@ -135,10 +138,12 @@ func initTransformer(cfg *config.Configuration, logger *slog.Logger) (service.Tr
 func initCentrifugeServer(cfg *config.Configuration, logger *slog.Logger) *server.CentrifugeServer {
 	wsServer := server.NewCentrifugeServer(&cfg.Centrifuge, logger)
 
-	cfxUserMappingClient := service.NewHTTPCfxUserMappingClient(cfg.CoinCfxAdapter.Host, logger)
+	cfxCacheTTL := time.Duration(cfg.CoinCfxAdapter.CacheTTLSeconds) * time.Second
+	cfxUserMappingClient := service.NewHTTPCfxUserMappingClient(cfg.CoinCfxAdapter.Host, cfxCacheTTL, logger)
 	wsServer.SetCfxUserMapper(cfxUserMappingClient)
 
-	userPrefClient := service.NewHTTPUserPreferenceClient(cfg.CoinSetting.Host, logger)
+	prefCacheTTL := time.Duration(cfg.CoinSetting.CacheTTLSeconds) * time.Second
+	userPrefClient := service.NewHTTPUserPreferenceClient(cfg.CoinSetting.Host, prefCacheTTL, logger)
 	wsServer.SetUserPreferenceProvider(userPrefClient)
 
 	return wsServer

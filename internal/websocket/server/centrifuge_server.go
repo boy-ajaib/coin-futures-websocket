@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -153,7 +154,7 @@ func (s *CentrifugeServer) Node() *centrifuge.Node {
 	return s.node
 }
 
-// Start starts the Centrifuge server
+// Start starts the Centrifuge server.
 func (s *CentrifugeServer) Start() error {
 	s.logger.Info("starting centrifuge server",
 		"node_name", s.config.NodeName,
@@ -162,12 +163,10 @@ func (s *CentrifugeServer) Start() error {
 	// Setup handlers before running the node
 	s.SetupHandlers()
 
-	// Run node in background.
-	go func() {
-		if err := s.node.Run(); err != nil {
-			s.logger.Error("centrifuge node run error", "error", err)
-		}
-	}()
+	// Run node synchronously to ensure broker is fully initialized before returning
+	if err := s.node.Run(); err != nil {
+		return fmt.Errorf("failed to start centrifuge node: %w", err)
+	}
 
 	return nil
 }

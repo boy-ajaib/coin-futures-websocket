@@ -55,3 +55,4 @@ coin_data:
 
 coin_setting:
     host: http://coin-setting-svc.stg.ajaib.int
+    cache_ttl_seconds: 60

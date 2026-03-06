@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"coin-futures-websocket/internal/cache"
 )
 
 // UserPreferenceClient defines the interface for fetching user futures preference
@@ -19,16 +21,18 @@ type HTTPUserPreferenceClient struct {
 	baseURL    string
 	httpClient *http.Client
 	logger     *slog.Logger
+	cache      *cache.TTLCache[string]
 }
 
 // NewHTTPUserPreferenceClient creates a new user preference client
-func NewHTTPUserPreferenceClient(baseURL string, logger *slog.Logger) *HTTPUserPreferenceClient {
+func NewHTTPUserPreferenceClient(baseURL string, cacheTTL time.Duration, logger *slog.Logger) *HTTPUserPreferenceClient {
 	return &HTTPUserPreferenceClient{
 		baseURL: baseURL,
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
 		logger: logger,
+		cache:  cache.NewTTLCache[string](cacheTTL),
 	}
 }
 
@@ -46,6 +50,11 @@ type UserPreferenceResult struct {
 
 // GetQuotePreference retrieves the user's futures quote preference
 func (c *HTTPUserPreferenceClient) GetQuotePreference(ctx context.Context, ajaibID string) (string, error) {
+	if cached, ok := c.cache.Get(ajaibID); ok {
+		c.logger.Debug("user preference cache hit", "ajaib_id", ajaibID)
+		return cached, nil
+	}
+
 	url := fmt.Sprintf("%s/api/v1/internal/coin-setting/user-futures-preference", c.baseURL)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -81,9 +90,12 @@ func (c *HTTPUserPreferenceClient) GetQuotePreference(ctx context.Context, ajaib
 		return "", fmt.Errorf("quote preference not found for ajaib_id: %s", ajaibID)
 	}
 
+	pref := response.Result.QuotePreference
+	c.cache.Set(ajaibID, pref)
+
 	c.logger.Debug("fetched user quote preference",
 		"ajaib_id", ajaibID,
-		"quote_preference", response.Result.QuotePreference)
+		"quote_preference", pref)
 
-	return response.Result.QuotePreference, nil
+	return pref, nil
 }

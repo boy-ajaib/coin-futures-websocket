@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
+
+	"coin-futures-websocket/internal/cache"
 )
 
 // CfxUserMappingClient defines the interface for mapping Ajaib user IDs to CFX user IDs
@@ -19,16 +22,18 @@ type HTTPCfxUserMappingClient struct {
 	baseURL    string
 	httpClient *http.Client
 	logger     *slog.Logger
+	cache      *cache.TTLCache[string]
 }
 
 // NewHTTPCfxUserMappingClient creates a new CFX user mapping client
-func NewHTTPCfxUserMappingClient(baseURL string, logger *slog.Logger) *HTTPCfxUserMappingClient {
+func NewHTTPCfxUserMappingClient(baseURL string, cacheTTL time.Duration, logger *slog.Logger) *HTTPCfxUserMappingClient {
 	return &HTTPCfxUserMappingClient{
 		baseURL: baseURL,
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
 		logger: logger,
+		cache:  cache.NewTTLCache[string](cacheTTL),
 	}
 }
 
@@ -47,6 +52,12 @@ type CfxMappingResult struct {
 
 // GetCfxUserID retrieves the CFX user ID for a given Ajaib user ID
 func (c *HTTPCfxUserMappingClient) GetCfxUserID(ctx context.Context, ajaibID int64) (string, error) {
+	cacheKey := strconv.FormatInt(ajaibID, 10)
+	if cached, ok := c.cache.Get(cacheKey); ok {
+		c.logger.Debug("cfx user mapping cache hit", "ajaib_id", ajaibID)
+		return cached, nil
+	}
+
 	url := fmt.Sprintf("%s/api/v1/internal/coin-cfx-adapter/user/%d/cfx", c.baseURL, ajaibID)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -80,9 +91,12 @@ func (c *HTTPCfxUserMappingClient) GetCfxUserID(ctx context.Context, ajaibID int
 		return "", fmt.Errorf("CFX user ID not found for ajaib_id: %d", ajaibID)
 	}
 
+	cfxUserID := response.Result.CfxUserID
+	c.cache.Set(cacheKey, cfxUserID)
+
 	c.logger.Debug("mapped ajaib_id to cfx_user_id",
 		"ajaib_id", ajaibID,
-		"cfx_user_id", response.Result.CfxUserID)
+		"cfx_user_id", cfxUserID)
 
-	return response.Result.CfxUserID, nil
+	return cfxUserID, nil
 }

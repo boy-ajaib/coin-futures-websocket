@@ -93,7 +93,8 @@ type (
 	}
 
 	CoinCfxAdapterConfiguration struct {
-		Host string `mapstructure:"host"`
+		Host            string `mapstructure:"host"`
+		CacheTTLSeconds int    `mapstructure:"cache_ttl_seconds"`
 	}
 
 	CoinDataConfiguration struct {
@@ -103,7 +104,8 @@ type (
 	}
 
 	CoinSettingConfiguration struct {
-		Host string `mapstructure:"host"`
+		Host            string `mapstructure:"host"`
+		CacheTTLSeconds int    `mapstructure:"cache_ttl_seconds"`
 	}
 )
 

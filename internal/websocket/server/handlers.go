@@ -94,7 +94,7 @@ func (s *CentrifugeServer) handleConnect(ctx context.Context, e centrifuge.Conne
 
 	// Create connection credentials
 	reply.Credentials = &centrifuge.Credentials{
-		UserID: cfxUserID,
+		UserID: ajaibID,
 		Info:   infoData,
 	}
 
@@ -222,7 +222,7 @@ func (s *CentrifugeServer) handleDisconnect(client *centrifuge.Client, e centrif
 		s.logger.Info("client disconnected",
 			"client_id", client.ID(),
 			"ajaib_id", clientInfo.AjaibID,
-			"cfx_user_id", client.UserID(),
+			"user_id", client.UserID(),
 			"disconnect_code", e.Code,
 			"disconnect_reason", e.Reason)
 
@@ -233,7 +233,7 @@ func (s *CentrifugeServer) handleDisconnect(client *centrifuge.Client, e centrif
 	} else {
 		s.logger.Info("client disconnected",
 			"client_id", client.ID(),
-			"cfx_user_id", client.UserID(),
+			"user_id", client.UserID(),
 			"disconnect_code", e.Code,
 			"disconnect_reason", e.Reason)
 	}
